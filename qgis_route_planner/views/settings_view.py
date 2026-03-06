@@ -3,6 +3,7 @@
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtWidgets import QMessageBox
 
+from qgis_route_planner.models.vehicle.vehicle_type import VehicleType
 from qgis_route_planner.views.base_qdialog import BaseQDialog
 
 
@@ -25,85 +26,111 @@ class SettingsDialog(BaseQDialog):
     def setupUi(self):
         self.setObjectName("SettingsDialog")
         self.resize(600, 400)
+
         self.verticalLayout = QtWidgets.QVBoxLayout(self)
         self.verticalLayout.setObjectName("verticalLayout")
+
         self.gridLayout = QtWidgets.QGridLayout()
         self.gridLayout.setObjectName("gridLayout")
+
         self.tabWidget = QtWidgets.QTabWidget(self)
         self.tabWidget.setObjectName("tabWidget")
+
         self.tabDb = QtWidgets.QWidget()
         self.tabDb.setObjectName("tabDb")
+
         self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.tabDb)
         self.verticalLayout_5.setObjectName("verticalLayout_5")
+
         self.formLayout_2 = QtWidgets.QFormLayout()
         self.formLayout_2.setObjectName("formLayout_2")
+
         self.label_7 = QtWidgets.QLabel(self.tabDb)
         self.label_7.setObjectName("label_7")
         self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_7)
+
         self.label_8 = QtWidgets.QLabel(self.tabDb)
         self.label_8.setObjectName("label_8")
         self.formLayout_2.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_8)
+
         self.label_9 = QtWidgets.QLabel(self.tabDb)
         self.label_9.setObjectName("label_9")
         self.formLayout_2.setWidget(5, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_9)
+
         self.label_10 = QtWidgets.QLabel(self.tabDb)
         self.label_10.setObjectName("label_10")
         self.formLayout_2.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_10)
+
         self.label_11 = QtWidgets.QLabel(self.tabDb)
         self.label_11.setObjectName("label_11")
         self.formLayout_2.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_11)
+
         self.horizontalLayout_4 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_4.setContentsMargins(-1, 0, -1, -1)
         self.horizontalLayout_4.setObjectName("horizontalLayout_4")
+
         self.editDbConButton = QtWidgets.QPushButton(self.tabDb)
         self.editDbConButton.setObjectName("editDbConButton")
         self.horizontalLayout_4.addWidget(self.editDbConButton)
         self.formLayout_2.setLayout(6, QtWidgets.QFormLayout.ItemRole.FieldRole, self.horizontalLayout_4)
+
         self.dbHostnameEdit = QtWidgets.QLineEdit(self.tabDb)
         self.dbHostnameEdit.setEnabled(False)
         self.dbHostnameEdit.setMaxLength(200)
         self.dbHostnameEdit.setObjectName("dbHostnameEdit")
         self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbHostnameEdit)
+
         self.dbPortEdit = QtWidgets.QLineEdit(self.tabDb)
         self.dbPortEdit.setEnabled(False)
         self.dbPortEdit.setMaxLength(6)
         self.dbPortEdit.setObjectName("dbPortEdit")
         self.formLayout_2.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbPortEdit)
+
         self.dbUsernameEdit = QtWidgets.QLineEdit(self.tabDb)
         self.dbUsernameEdit.setEnabled(False)
         self.dbUsernameEdit.setMaxLength(50)
         self.dbUsernameEdit.setObjectName("dbUsernameEdit")
         self.formLayout_2.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbUsernameEdit)
+
         self.dbPasswordEdit = QtWidgets.QLineEdit(self.tabDb)
         self.dbPasswordEdit.setEnabled(False)
         self.dbPasswordEdit.setMaxLength(50)
         self.dbPasswordEdit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.dbPasswordEdit.setObjectName("dbPasswordEdit")
         self.formLayout_2.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbPasswordEdit)
+
         self.dbSchemaEdit = QtWidgets.QLineEdit(self.tabDb)
         self.dbSchemaEdit.setEnabled(False)
         self.dbSchemaEdit.setObjectName("dbSchemaEdit")
         self.formLayout_2.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbSchemaEdit)
+
         self.label_13 = QtWidgets.QLabel(self.tabDb)
         self.label_13.setObjectName("label_13")
         self.formLayout_2.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_13)
+
         self.dbDatabaseNameEdit = QtWidgets.QLineEdit(self.tabDb)
         self.dbDatabaseNameEdit.setEnabled(False)
         self.dbDatabaseNameEdit.setMaxLength(100)
         self.dbDatabaseNameEdit.setObjectName("dbDatabaseNameEdit")
         self.formLayout_2.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbDatabaseNameEdit)
         self.verticalLayout_5.addLayout(self.formLayout_2)
+
         spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout_5.addItem(spacerItem)
+
         self.tabWidget.addTab(self.tabDb, "")
+
         self.tabProfiles = QtWidgets.QWidget()
         self.tabProfiles.setObjectName("tabProfiles")
+
         self.horizontalLayout = QtWidgets.QHBoxLayout(self.tabProfiles)
         self.horizontalLayout.setObjectName("horizontalLayout")
+
         self.verticalLayout_4 = QtWidgets.QVBoxLayout()
         self.verticalLayout_4.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetDefaultConstraint)
         self.verticalLayout_4.setContentsMargins(-1, -1, 0, -1)
         self.verticalLayout_4.setObjectName("verticalLayout_4")
+
         self.profilesListWidget = QtWidgets.QListWidget(self.tabProfiles)
         self.profilesListWidget.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.profilesListWidget.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -111,87 +138,112 @@ class SettingsDialog(BaseQDialog):
         self.profilesListWidget.setItemAlignment(QtCore.Qt.AlignmentFlag.AlignLeading)
         self.profilesListWidget.setObjectName("profilesListWidget")
         self.verticalLayout_4.addWidget(self.profilesListWidget)
+
         self.gridLayout_3 = QtWidgets.QGridLayout()
         self.gridLayout_3.setContentsMargins(-1, -1, 0, 0)
         self.gridLayout_3.setObjectName("gridLayout_3")
+
         self.deleteProfileButton = QtWidgets.QPushButton(self.tabProfiles)
         self.deleteProfileButton.setEnabled(False)
         self.deleteProfileButton.setObjectName("deleteProfileButton")
         self.gridLayout_3.addWidget(self.deleteProfileButton, 1, 0, 1, 1)
+
         self.createProfileButton = QtWidgets.QPushButton(self.tabProfiles)
         self.createProfileButton.setObjectName("createProfileButton")
         self.gridLayout_3.addWidget(self.createProfileButton, 0, 0, 1, 1)
+
         self.setActiveProfileButton = QtWidgets.QPushButton(self.tabProfiles)
         self.setActiveProfileButton.setEnabled(False)
         self.setActiveProfileButton.setObjectName("setActiveProfileButton")
         self.gridLayout_3.addWidget(self.setActiveProfileButton, 3, 0, 1, 1)
+
         self.editProfileButton = QtWidgets.QPushButton(self.tabProfiles)
         self.editProfileButton.setEnabled(False)
         self.editProfileButton.setObjectName("editProfileButton")
         self.gridLayout_3.addWidget(self.editProfileButton, 2, 0, 1, 1)
         self.verticalLayout_4.addLayout(self.gridLayout_3)
         self.horizontalLayout.addLayout(self.verticalLayout_4)
+
         self.profilesFormLayout = QtWidgets.QGroupBox(self.tabProfiles)
         self.profilesFormLayout.setObjectName("profilesFormLayout")
+
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.profilesFormLayout)
         self.verticalLayout_2.setContentsMargins(-1, 9, -1, 0)
         self.verticalLayout_2.setObjectName("verticalLayout_2")
+
         self.formLayout = QtWidgets.QFormLayout()
         self.formLayout.setObjectName("formLayout")
+
         self.label = QtWidgets.QLabel(self.profilesFormLayout)
         self.label.setObjectName("label")
         self.formLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label)
+
         self.label_2 = QtWidgets.QLabel(self.profilesFormLayout)
         self.label_2.setObjectName("label_2")
         self.formLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_2)
+
         self.label_3 = QtWidgets.QLabel(self.profilesFormLayout)
         self.label_3.setObjectName("label_3")
         self.formLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_3)
+
         self.label_4 = QtWidgets.QLabel(self.profilesFormLayout)
         self.label_4.setObjectName("label_4")
         self.formLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_4)
+
         self.label_5 = QtWidgets.QLabel(self.profilesFormLayout)
         self.label_5.setObjectName("label_5")
         self.formLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_5)
+
         self.label_6 = QtWidgets.QLabel(self.profilesFormLayout)
         self.label_6.setObjectName("label_6")
         self.formLayout.setWidget(6, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_6)
+
         self.profileNameEdit = QtWidgets.QLineEdit(self.profilesFormLayout)
         self.profileNameEdit.setEnabled(False)
         self.profileNameEdit.setMaxLength(50)
         self.profileNameEdit.setObjectName("profileNameEdit")
         self.formLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileNameEdit)
+
         self.profileHeightSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
         self.profileHeightSpinBox.setEnabled(False)
         self.profileHeightSpinBox.setMaximum(999999.0)
         self.profileHeightSpinBox.setStepType(QtWidgets.QAbstractSpinBox.StepType.AdaptiveDecimalStepType)
         self.profileHeightSpinBox.setObjectName("profileHeightSpinBox")
         self.formLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileHeightSpinBox)
+
         self.profileWidthSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
         self.profileWidthSpinBox.setEnabled(False)
         self.profileWidthSpinBox.setMaximum(999999.0)
         self.profileWidthSpinBox.setObjectName("profileWidthSpinBox")
         self.formLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileWidthSpinBox)
+
         self.profileWeightSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
         self.profileWeightSpinBox.setEnabled(False)
         self.profileWeightSpinBox.setMaximum(999999.0)
         self.profileWeightSpinBox.setObjectName("profileWeightSpinBox")
         self.formLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileWeightSpinBox)
+
         self.profileSpeedSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
         self.profileSpeedSpinBox.setEnabled(False)
         self.profileSpeedSpinBox.setPrefix("")
         self.profileSpeedSpinBox.setMaximum(200.0)
         self.profileSpeedSpinBox.setObjectName("profileSpeedSpinBox")
         self.formLayout.setWidget(6, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileSpeedSpinBox)
+
         spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.formLayout.setItem(7, QtWidgets.QFormLayout.ItemRole.LabelRole, spacerItem1)
+
         self.vehicleTypeComboBox = QtWidgets.QComboBox(self.profilesFormLayout)
         self.vehicleTypeComboBox.setEnabled(False)
+        for v_type in VehicleType:
+            self.vehicleTypeComboBox.addItem(v_type.value, v_type)
         self.vehicleTypeComboBox.setObjectName("vehicleTypeComboBox")
         self.formLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.vehicleTypeComboBox)
+
         self.label_12 = QtWidgets.QLabel(self.profilesFormLayout)
         self.label_12.setObjectName("label_12")
         self.formLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_12)
+
         self.profileDepthSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
         self.profileDepthSpinBox.setEnabled(False)
         self.profileDepthSpinBox.setMaximum(999999.0)

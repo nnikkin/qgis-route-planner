@@ -236,13 +236,7 @@ class SettingsWindowController(QObject):
             self.__active_profile_id = self.__settings_service.get_active_profile_id()
 
             for profile in profiles:
-                type_display = (
-                    VehicleType.CAR.value["ru"]
-                    if profile.type == "car"
-                    else VehicleType.TRUCK.value["ru"]
-                )
-                display_name = f"{profile.name} [{type_display}]"
-
+                display_name = f"{profile.name}"
                 item = QListWidgetItem(display_name)
                 item.setData(Qt.ItemDataRole.UserRole, profile.id)
                 item.setData(Qt.ItemDataRole.UserRole + 1, display_name)
