@@ -218,3 +218,6 @@ help/source/
 
 
 *.ui
+*.ps1
+*.zip
+*.qrc

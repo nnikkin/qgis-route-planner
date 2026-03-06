@@ -1,8 +1,7 @@
 from qgis.PyQt.QtCore import QSettings
 
-from qgis_route_planner.models.vehicle.vehicle_profile import VehicleProfile
-from qgis_route_planner.repositories.db_connection import DbConnection
-from qgis_route_planner.repositories.vehicle_repository import VehicleProfileRepository
+from ..data.vehicle import VehicleProfile, VehicleType
+from ..repositories import DbConnection, VehicleProfileRepository
 
 
 class SettingsService:
@@ -16,7 +15,6 @@ class SettingsService:
     def __init__(self, vehicle_repo: VehicleProfileRepository):
         self.__settings: QSettings = QSettings(self.__SETTINGS_FILE, QSettings.Format.IniFormat)
         self.__vehicle_repo: VehicleProfileRepository = vehicle_repo
-
 
     # Работа с настройками БД
     def load_db_params(self) -> DbConnection | None:
@@ -61,27 +59,41 @@ class SettingsService:
         self.__settings.endGroup()
         return int(value) if value is not None else None
 
-    def create_profile(self, profile: VehicleProfile) -> int:
+    def create_profile(self, name: str, type: VehicleType, height: float, width: float, depth: float, weight: float) -> int:
         if not self.__vehicle_repo:
             raise Exception("Репозиторий профилей не инициализирован")
         try:
+            profile = VehicleProfile(
+                name=name,
+                type=type.name,
+                height_m=height,
+                width_m=width,
+                depth_m=depth,
+                weight_t=weight
+            )
             return self.__vehicle_repo.add_profile(profile)
         except Exception as e:
             raise Exception(f"Ошибка создания профиля: {str(e)}")
 
-    def get_all_profiles(self) -> list[VehicleProfile]:
+    def get_profiles(self) -> list[VehicleProfile]:
         if not self.__vehicle_repo:
-            return []
-        return self.__vehicle_repo.get_all()
+            raise Exception("Репозиторий профилей не инициализирован")
+        try:
+            return self.__vehicle_repo.get_all()
+        except Exception as e:
+            raise Exception(f"Ошибка получения профилей: {str(e)}")
 
-    def get_profile_by_id(self, profile_id: int) -> VehicleProfile | None:
+    def get_profile_by_id(self, profile_id: int) -> VehicleProfile:
         if not self.__vehicle_repo:
-            return None
-        return self.__vehicle_repo.get_by_id(profile_id)
+            raise Exception("Репозиторий профилей не инициализирован")
+        try:
+            return self.__vehicle_repo.get_by_id(profile_id)
+        except Exception as e:
+            raise Exception(f"Ошибка получения профиля: {str(e)}")
 
     def update_profile(self, profile_id: int, profile: VehicleProfile) -> bool:
         if not self.__vehicle_repo:
-            return False
+            raise Exception("Репозиторий профилей не инициализирован")
         try:
             self.__vehicle_repo.upd_profile(profile_id, profile)
             return True
@@ -90,7 +102,7 @@ class SettingsService:
 
     def delete_profile(self, profile_id: int) -> bool:
         if not self.__vehicle_repo:
-            return False
+            raise Exception("Репозиторий профилей не инициализирован")
         try:
             self.__vehicle_repo.del_profile(profile_id)
             return True
