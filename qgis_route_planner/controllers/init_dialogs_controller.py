@@ -10,6 +10,7 @@ class InitDialogsController(QObject):
     con_params_obtained = pyqtSignal()
     layers_selected = pyqtSignal()
     columns_configured = pyqtSignal()
+    schemas_loaded = pyqtSignal(list)
 
     connection_failed = pyqtSignal(str)
     layer_selection_failed = pyqtSignal(str)
@@ -104,7 +105,7 @@ class InitDialogsController(QObject):
     def get_layers(self) -> list[str]:
         return self.__service.get_tables(self.__db_config_model.schema)
 
-    @pyqtSlot(str, GeometryType, LayerRole)
+    @pyqtSlot(str, object, object)
     def add_layer_to_config(self, layer_name: str, geom_type: GeometryType, layer_role: LayerRole):
         self.__layer_config_model.add_layer(layer_name, geom_type, layer_role)
 
@@ -113,13 +114,13 @@ class InitDialogsController(QObject):
         if 0 <= index < len(self.__layer_config_model.selected_layers):
             self.__layer_config_model.pop_layer(index)
 
-    @pyqtSlot(int, GeometryType)
+    @pyqtSlot(int, object)
     def change_geometry_type(self, index: int, new_type: GeometryType):
         layer = self.__layer_config_model.selected_layers[index]
         layer.geom_type = new_type
         self.__layer_config_model.update_layer(layer, index)
 
-    @pyqtSlot(int, LayerRole)
+    @pyqtSlot(int, object)
     def change_layer_role(self, index: int, new_role: LayerRole):
         layer = self.__layer_config_model.selected_layers[index]
         layer.role = new_role

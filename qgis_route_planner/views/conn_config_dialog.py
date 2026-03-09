@@ -30,7 +30,7 @@ class ConnectionConfigDialog(QDialog):
 
         self.__setupUi()
 
-    def __connect_signals_slots(self):
+    def __connect_signals(self):
         self.host_edit.textChanged.connect(self.__controller.change_host_value)
         self.port_edit.textChanged.connect(self.__controller.change_port_value)
         self.username_edit.textChanged.connect(self.__controller.change_username_value)
@@ -147,7 +147,7 @@ class ConnectionConfigDialog(QDialog):
 
         self.__retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_signals_slots()
+        self.__connect_signals()
 
     def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
@@ -233,7 +233,6 @@ class ConnectionConfigDialog(QDialog):
         self.__controller.connection_step_finish()
 
     def __fill_combobox(self):
-        self.setCursor(QtCore.Qt.WaitCursor)
         self.schema_comboBox.setEnabled(False)
         self.check_con_button.setEnabled(False)
         self.schema_comboBox.clear()
@@ -242,7 +241,6 @@ class ConnectionConfigDialog(QDialog):
         schemas = self.__controller.get_schemas()
         if not schemas:
             self.check_con_button.setEnabled(True)
-            self.setCursor(QtCore.Qt.ArrowCursor)
             return
 
         self.schema_comboBox.addItems(schemas)
@@ -250,4 +248,3 @@ class ConnectionConfigDialog(QDialog):
 
         self.schema_comboBox.setEnabled(True)
         self.check_con_button.setEnabled(True)
-        self.setCursor(QtCore.Qt.ArrowCursor)

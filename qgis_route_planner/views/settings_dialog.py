@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox, QListWidgetItem
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from ..controllers import SettingsWindowController
-from ..data.models import SettingsModel
+from ..data.models import SettingsModel, FormMode
 from ..data.vehicle import VehicleProfile, VehicleType
 
 
@@ -15,42 +14,46 @@ class SettingsDialog(QDialog):
     def __init__(
             self,
             model: SettingsModel,
-            controller: SettingsWindowController = None,
+            controller: SettingsWindowController,
             parent: QObject = None
     ):
         super().__init__(parent)
 
         self.__controller: SettingsWindowController = controller
         self.__model: SettingsModel = model
-        self.__controller_connected = False
 
         self.setupUi()
-        if self.__controller is not None:
-            self.set_controller(self.__controller)
 
-    def set_controller(self, controller: SettingsWindowController):
-        self.__controller = controller
-        if not self.__controller_connected:
-            self.__connect_controller_slots()
-            self.__controller_connected = True
+    def __connect_signals(self):
+        """Подключение сигналов от контроллера и виджетов"""
+        # Сигналы от контроллера к view
+        self.__controller.open_page_requested.connect(self.__open_dialog)
+        self.__controller.show_error.connect(self.__show_error)
+        self.__controller.show_warning.connect(self.__show_warning)
+        self.__controller.show_info.connect(self.__show_info)
+        self.__controller.request_delete_confirmation.connect(self.__confirm_delete_profile)
 
-    def __connect_controller_slots(self):
-        self.editDbConButton.clicked.connect(self.change_db_con_params_clicked)
-        self.createProfileButton.clicked.connect(self.create_profile_clicked)
+        # Сигналы от модели к view
+        self.__model.db_params_changed.connect(self.__on_db_params_changed)
+        self.__model.profiles_changed.connect(self.__on_profiles_changed)
+        self.__model.active_profile_id_changed.connect(self.__on_active_profile_changed)
+        self.__model.current_profile_id_changed.connect(self.__on_current_profile_changed)
+        self.__model.editing_mode_changed.connect(self.__on_editing_mode_changed)
+        self.__model.current_profile_data_changed.connect(self.__on_current_profile_data_changed)
+
+        # Сигналы от view к контроллеру
+        self.editDbConButton.clicked.connect(self.__on_change_db_clicked)
+        self.createProfileButton.clicked.connect(self.__on_create_profile_clicked)
         self.editProfileButton.clicked.connect(self.__controller.start_profile_edit)
-        self.saveProfileButton.clicked.connect(self.save_profile_clicked)
-        self.deleteProfileButton.clicked.connect(self.__controller.delete_profile)
-        self.cancelProfileEditButton.clicked.connect(self.cancel_profile_edit_clicked)
-        self.setActiveProfileButton.clicked.connect(self.set_active_profile_clicked)
-        self.profilesListWidget.itemSelectionChanged.connect(self.profile_selection_changed)
-        self.profilesListWidget.itemDoubleClicked.connect(self.profile_double_clicked)
-        self.rebuildGraphButton.clicked.connect(self.rebuild_graph_clicked)
 
-    def __connect_model_slots(self):
-        self.__model.profile_editing_state_changed.connect(self.__change_form_state)
-        self.__model.active_profile_id_changed.connect(self.__active_profile_changed)
-        self.__model.current_profile_id_changed.connect(self.__current_profile_changed)
-        self.__model.profiles_changed.connect(self.__profiles_changed)
+        self.saveProfileButton.clicked.connect(self.__on_save_profile_clicked)
+        self.deleteProfileButton.clicked.connect(self.__controller.request_delete_profile)
+        self.cancelProfileEditButton.clicked.connect(self.__controller.cancel_profile_edit)
+        self.setActiveProfileButton.clicked.connect(self.__controller.set_active_profile)
+
+        self.profilesListWidget.itemSelectionChanged.connect(self.__on_profile_selection_changed)
+        self.profilesListWidget.itemDoubleClicked.connect(self.__on_profile_double_clicked)
+        self.rebuildGraphButton.clicked.connect(self.__on_rebuild_graph_clicked)
 
     def setupUi(self):
         self.setObjectName("SettingsDialog")
@@ -304,7 +307,7 @@ class SettingsDialog(QDialog):
         self.retranslateUi()
         self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_model_slots()
+        self.__connect_signals()
 
         self.setTabOrder(self.tabWidget, self.dbHostnameEdit)
         self.setTabOrder(self.dbHostnameEdit, self.dbPortEdit)
@@ -362,85 +365,93 @@ class SettingsDialog(QDialog):
         self.rebuildGraphButton.setText(_translate("Dialog", "Перестроить граф дорог"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabGraph), _translate("Dialog", "Граф дорог"))
 
-    def set_tab_active(self, tab_index: int):
-        self.tabWidget.setCurrentIndex(tab_index)
+    # Слоты для сигналов от контроллера
+    def __open_dialog(self, page_index: int):
+        """Открыть диалог на указанной вкладке"""
+        self.tabWidget.setCurrentIndex(page_index)
+        self.show()
 
-    def closeEvent(self, event, **kwargs):
-        if self.__model.is_editing_enabled:
-            close_question = self.__show_question_dialog(
-                "Внимание",
-                "Вы уверены, что хотите отменить несохранённые изменения и закрыть окно настроек?",
-            )
-            if close_question == QMessageBox.Yes:
-                self.__controller.cancel_profile_edit()
-                event.accept()
-            else:
-                event.ignore()
-        else:
-            event.accept()
+    def __show_warning(self, message: str):
+        QMessageBox.warning(self, "Предупреждение", message, QMessageBox.Ok)
 
+    def __show_info(self, message: str):
+        QMessageBox.information(self, "Информация", message, QMessageBox.Ok)
 
-    def change_db_con_params_clicked(self):
-        reconnect_question = self.__show_question_dialog(
-            "Внимание",
-            "Вы уверены, что хотите изменить настройки подключения к БД?",
+    def __show_error(self, message: str):
+        QMessageBox.critical(self, "Ошибка", message, QMessageBox.Ok)
+
+    def __confirm_delete_profile(self, profile_name: str, is_active: bool):
+        """Показать диалог подтверждения удаления профиля"""
+        msg = "Вы пытаетесь удалить активный профиль.\n" if is_active else ""
+        question = QMessageBox.question(
+            self,
+            "Подтверждение удаления",
+            f"{msg}Вы уверены, что хотите удалить профиль '{profile_name}'?",
+            QMessageBox.Yes | QMessageBox.No
         )
-        if reconnect_question == QMessageBox.Yes:
-            self.__controller.change_db_con_params()
+        if question == QMessageBox.Yes:
+            self.__controller.confirm_delete_profile()
 
-    def rebuild_graph_clicked(self):
-        rebuild_question = self.__show_question_dialog(
-            "Внимание",
-            "Вы уверены, что хотите перестроить граф?",
-        )
-        if rebuild_question == QMessageBox.Yes:
-            self.__controller.rebuild_graph()
-
-    def create_profile_clicked(self):
-        self.clear_profile_form()
-        self.profilesListWidget.clearSelection()
-        self.__controller.start_profile_create()
-
-    def save_profile_clicked(self):
-        self.__controller.save_profile(*self.profile_form_data())
-
-    def cancel_profile_edit_clicked(self):
-        self.__controller.cancel_profile_edit()
-
-    def profile_selection_changed(self):
-        self.__controller.select_profile(self.selected_profile_id())
-
-    def profile_double_clicked(self, item):
-        self.__controller.set_active_profile(item.data(QtCore.Qt.ItemDataRole.UserRole))
-
-    def set_active_profile_clicked(self):
-        self.__controller.set_active_profile(self.selected_profile_id())
-
+    # Слоты для сигналов от модели
     @pyqtSlot(object)
-    def __current_profile_changed(self, _profile_id=None):
-        self.__refresh_profile_buttons()
-
-    @pyqtSlot(object)
-    def __active_profile_changed(self, _profile_id=None):
-        self.__update_profiles_list(self.__model.profiles, self.__model.active_profile_id)
+    def __on_db_params_changed(self, db):
+        """Обновить отображение параметров БД"""
+        if db is None:
+            return
+        self.dbHostnameEdit.setText(db.host)
+        self.dbPortEdit.setText(str(db.port))
+        self.dbUsernameEdit.setText(db.username)
+        self.dbPasswordEdit.setText(db.password)
+        self.dbDatabaseNameEdit.setText(db.database)
+        self.dbSchemaEdit.setText(db.schema)
 
     @pyqtSlot(list)
-    def __profiles_changed(self, profiles: list[VehicleProfile]):
+    def __on_profiles_changed(self, profiles: list[VehicleProfile]):
+        """Обновить список профилей"""
         self.__update_profiles_list(profiles, self.__model.active_profile_id)
 
-    @pyqtSlot(bool)
-    def __change_form_state(self, enabled: bool):
-        self.profileNameEdit.setEnabled(enabled)
-        self.vehicleTypeComboBox.setEnabled(enabled)
-        self.profileHeightSpinBox.setEnabled(enabled)
-        self.profileWidthSpinBox.setEnabled(enabled)
-        self.profileDepthSpinBox.setEnabled(enabled)
-        self.profileWeightSpinBox.setEnabled(enabled)
-        self.saveProfileButton.setEnabled(enabled)
-        self.cancelProfileEditButton.setEnabled(enabled)
-        self.__refresh_profile_buttons()
+    @pyqtSlot(object)
+    def __on_active_profile_changed(self, profile_id: int):
+        """Обновить отображение активного профиля в списке"""
+        self.__update_profiles_list(self.__model.profiles, profile_id)
 
+    @pyqtSlot(object)
+    def __on_current_profile_changed(self, profile_id: int):
+        """Выделить профиль в списке"""
+        self.__select_profile_in_list(profile_id)
+
+    @pyqtSlot(FormMode)
+    def __on_editing_mode_changed(self, mode: FormMode):
+        """Обновить состояние формы редактирования"""
+        is_editing = mode == FormMode.EDIT
+        self.profileNameEdit.setEnabled(is_editing)
+        self.vehicleTypeComboBox.setEnabled(is_editing)
+        self.profileHeightSpinBox.setEnabled(is_editing)
+        self.profileWidthSpinBox.setEnabled(is_editing)
+        self.profileDepthSpinBox.setEnabled(is_editing)
+        self.profileWeightSpinBox.setEnabled(is_editing)
+        self.saveProfileButton.setEnabled(is_editing)
+        self.cancelProfileEditButton.setEnabled(is_editing)
+
+        # Кнопки управления списком
+        has_selection = self.__model.current_profile_id is not None
+        self.editProfileButton.setEnabled(has_selection and not is_editing)
+        self.deleteProfileButton.setEnabled(has_selection and not is_editing)
+        self.setActiveProfileButton.setEnabled(has_selection and not is_editing)
+        self.createProfileButton.setEnabled(not is_editing)
+        self.profilesListWidget.setEnabled(not is_editing)
+
+    @pyqtSlot(object)
+    def __on_current_profile_data_changed(self, profile: VehicleProfile):
+        """Обновить форму редактирования данными профиля"""
+        if profile is None:
+            self.__clear_profile_form()
+        else:
+            self.__set_profile_form(profile)
+
+    # Вспомогательные методы
     def __update_profiles_list(self, profiles_list: list[VehicleProfile], active_id: int | None):
+        """Обновить список профилей в UI"""
         current_profile_id = self.__model.current_profile_id
         self.profilesListWidget.blockSignals(True)
         self.profilesListWidget.clear()
@@ -454,50 +465,40 @@ class SettingsDialog(QDialog):
                 self.profilesListWidget.setCurrentItem(item)
 
         self.profilesListWidget.blockSignals(False)
-        self.__refresh_profile_buttons()
 
-    def __refresh_profile_buttons(self):
-        has_selection = self.__model.current_profile_id is not None
-        is_editing = self.__model.is_editing_enabled
+    def __select_profile_in_list(self, profile_id: int | None):
+        """Выделить профиль в списке"""
+        if profile_id is None:
+            self.profilesListWidget.clearSelection()
+            return
 
-        self.editProfileButton.setEnabled(has_selection and not is_editing)
-        self.deleteProfileButton.setEnabled(has_selection and not is_editing)
-        self.setActiveProfileButton.setEnabled(has_selection and not is_editing)
-        self.createProfileButton.setEnabled(not is_editing)
-        self.profilesListWidget.setEnabled(not is_editing)
+        for i in range(self.profilesListWidget.count()):
+            item = self.profilesListWidget.item(i)
+            if item.data(QtCore.Qt.ItemDataRole.UserRole) == profile_id:
+                self.profilesListWidget.setCurrentItem(item)
+                break
 
-    def selected_profile_id(self) -> int | None:
-        item = self.profilesListWidget.currentItem()
-        if item is None:
-            return None
-        return item.data(QtCore.Qt.ItemDataRole.UserRole)
-
-    def profile_form_data(self):
-        return (
-            self.profileNameEdit.text().strip(),
-            self.vehicleTypeComboBox.currentData(),
-            self.profileHeightSpinBox.value(),
-            self.profileWidthSpinBox.value(),
-            self.profileDepthSpinBox.value(),
-            self.profileWeightSpinBox.value(),
-        )
-
-    def set_profile_form(self, profile: VehicleProfile):
+    def __set_profile_form(self, profile: VehicleProfile):
+        """Заполнить форму данными профиля"""
         self.profileNameEdit.setText(profile.name)
+
         index = self.vehicleTypeComboBox.findData(profile.type)
         if index < 0 and isinstance(profile.type, str):
             try:
+                from ..data.vehicle import VehicleType
                 index = self.vehicleTypeComboBox.findData(VehicleType[profile.type])
             except KeyError:
                 index = -1
         if index >= 0:
             self.vehicleTypeComboBox.setCurrentIndex(index)
+
         self.profileHeightSpinBox.setValue(profile.height_m)
         self.profileWidthSpinBox.setValue(profile.width_m)
         self.profileWeightSpinBox.setValue(profile.weight_t)
         self.profileDepthSpinBox.setValue(profile.depth_m)
 
-    def clear_profile_form(self):
+    def __clear_profile_form(self):
+        """Очистить форму профиля"""
         self.profileNameEdit.clear()
         self.vehicleTypeComboBox.setCurrentIndex(0)
         self.profileHeightSpinBox.setValue(0)
@@ -505,39 +506,79 @@ class SettingsDialog(QDialog):
         self.profileWeightSpinBox.setValue(0)
         self.profileDepthSpinBox.setValue(0)
 
-    def focus_profile_name(self):
-        self.profileNameEdit.setFocus()
-
-    def set_db_form(self, db):
-        self.dbHostnameEdit.setText(db.host)
-        self.dbPortEdit.setText(str(db.port))
-        self.dbUsernameEdit.setText(db.username)
-        self.dbPasswordEdit.setText(db.password)
-        self.dbDatabaseNameEdit.setText(db.database)
-        self.dbSchemaEdit.setText(db.schema)
-
-    def show_warning(self, message: str):
-        QMessageBox.warning(self, "", message, QMessageBox.Ok)
-
-    def show_info(self, message: str):
-        QMessageBox.information(self, "", message, QMessageBox.Ok)
-
-    def show_error(self, message: str):
-        QMessageBox.critical(self, "", message, QMessageBox.Ok)
-
-    def confirm_delete_profile(self, profile_name: str, is_active: bool) -> bool:
-        msg = "Вы пытаетесь удалить активный профиль.\n" if is_active else ""
-        question = self.__show_question_dialog(
-            "",
-            f"{msg}Вы уверены, что хотите удалить профиль '{profile_name}'?",
-        )
-        return question == QMessageBox.Yes
-
-    def __show_question_dialog(self, title: str, msg: str) -> QMessageBox:
+    # Слоты для событий от виджетов
+    def __on_change_db_clicked(self):
+        """Обработчик нажатия на кнопку изменения БД"""
         question = QMessageBox.question(
             self,
-            title,
-            msg,
+            "Внимание",
+            "Вы уверены, что хотите изменить настройки подключения к БД?",
             QMessageBox.Yes | QMessageBox.No
         )
-        return question
+        if question == QMessageBox.Yes:
+            # Здесь должен быть вызов метода контроллера для изменения БД0-
+            self.__controller.change_db_connection()
+
+    def __on_rebuild_graph_clicked(self):
+        """Обработчик нажатия на кнопку перестроения графа"""
+        question = QMessageBox.question(
+            self,
+            "Внимание",
+            "Вы уверены, что хотите перестроить граф?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if question == QMessageBox.Yes:
+            self.__controller.rebuild_graph()
+
+    def __on_save_profile_clicked(self):
+        """Обработчик сохранения профиля"""
+        self.__controller.save_profile(
+            self.profileNameEdit.text(),
+            self.vehicleTypeComboBox.currentData(),
+            self.profileHeightSpinBox.value(),
+            self.profileWidthSpinBox.value(),
+            self.profileDepthSpinBox.value(),
+            self.profileWeightSpinBox.value(),
+        )
+
+    def __on_create_profile_clicked(self):
+        """Обработчик создания нового профиля"""
+        self.profilesListWidget.clearSelection()
+        self.__clear_profile_form()
+        self.__controller.start_profile_create()
+
+    def __on_profile_selection_changed(self):
+        """Обработчик изменения выделения в списке профилей"""
+        profile_id = self.__get_selected_profile_id()
+        self.__controller.select_profile(profile_id)
+
+    def __on_profile_double_clicked(self, item):
+        """Обработчик двойного клика по профилю"""
+        profile_id = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        if profile_id is not None:
+            self.__controller.select_profile(profile_id)
+            self.__controller.set_active_profile()
+
+    def __get_selected_profile_id(self) -> int | None:
+        """Получить ID выбранного профиля"""
+        item = self.profilesListWidget.currentItem()
+        if item is None:
+            return None
+        return item.data(QtCore.Qt.ItemDataRole.UserRole)
+
+    def closeEvent(self, event):
+        """Обработчик закрытия окна"""
+        if self.__model.is_editing_enabled:
+            close_question = QMessageBox.question(
+                self,
+                "Внимание",
+                "Вы уверены, что хотите отменить несохранённые изменения и закрыть окно настроек?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if close_question == QMessageBox.Yes:
+                self.__controller.cancel_profile_edit()
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()

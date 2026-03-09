@@ -1,221 +1,231 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
 from qgis.PyQt.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from ..data.models import FormMode, SettingsModel
-from ..data.vehicle import VehicleProfile, VehicleType
-from ..repositories import DbConnection
-from ..services import SettingsService
-from ..views import SettingsDialog
+if TYPE_CHECKING:
+    from ..data.models import SettingsModel, FormMode
+    from ..services import SettingsService
+    from ..data.vehicle import VehicleType, VehicleProfile
+
+from ..data.models import FormMode
+from ..data.vehicle import VehicleProfile
 
 
 class SettingsWindowController(QObject):
-    """Контроллер диалога настроек плагина."""
+    """Контроллер окна настроек"""
 
-    settings_saved = pyqtSignal(DbConnection)
-    profile_changed = pyqtSignal(VehicleProfile)
-    profile_deleted = pyqtSignal(int)
+    open_page_requested = pyqtSignal(int)
+    show_error = pyqtSignal(str)
+    show_warning = pyqtSignal(str)
+    show_info = pyqtSignal(str)
+    request_delete_confirmation = pyqtSignal(str, bool)
 
     reconnect_requested = pyqtSignal()
-    reconnect_cancelled = pyqtSignal()
     graph_rebuild_requested = pyqtSignal()
 
     def __init__(
             self,
             model: SettingsModel,
-            settings_dialog: SettingsDialog,
             settings_service: SettingsService,
     ):
         super().__init__()
 
-        self.__settings_model = model
-        self.__settings_dialog = settings_dialog
-        self.__settings_service = settings_service
-
-        self.__settings_dialog.set_controller(self)
+        self._model = model
+        self._service = settings_service
 
     def open_settings_dialog(self, tab_index: int = 0):
-        self.__initialize()
-        self.set_current_tab_active(tab_index)
-        self.__settings_dialog.open()
+        """Открыть диалог настроек"""
+        self._load_initial_state()
+        self.open_page_requested.emit(tab_index)
 
-    def close_settings_window(self):
-        self.__settings_dialog.close()
+    def _load_initial_state(self):
+        """Загрузить начальное состояние"""
+        self._load_db_params()
+        self._load_profiles()
+        self._model.current_profile_id = None
+        self._model.current_profile_data = None
+        self._model.editing_mode = FormMode.EMPTY
 
-    def set_current_tab_active(self, tab_index: int = 0):
-        self.__settings_dialog.set_tab_active(tab_index)
-
-    def __initialize(self):
-        self.__set_db_form()
-        self.__load_profiles()
-        self.cancel_profile_edit()
-
-    def __set_db_form(self):
+    def _load_db_params(self):
+        """Загрузить параметры БД в модель"""
         try:
-            db = self.__settings_service.load_db_params()
-            if db:
-                self.__settings_dialog.set_db_form(db)
-            else:
-                self.__settings_dialog.show_error("Не удалось загрузить параметры подключения к БД")
+            db = self._service.load_db_params()
+            self._model.db_params = db
         except Exception as e:
-            self.__settings_dialog.show_error(f"Ошибка загрузки параметров подключения к БД: {e}")
+            self.show_error.emit(f"Ошибка загрузки параметров подключения к БД: {e}")
 
-    def __load_profiles(self):
+    def _load_profiles(self):
+        """Загрузить список профилей в модель"""
         try:
-            self.__settings_model.active_profile_id = self.__settings_service.get_active_profile_id()
-            self.__settings_model.profiles = self.__settings_service.get_profiles()
-            self.__emit_active_profile_changed()
+            self._model.profiles = self._service.get_profiles()
+            self._model.active_profile_id = self._service.get_active_profile_id()
         except Exception as e:
-            self.__settings_dialog.show_error(f"Произошла ошибка при загрузке профилей ТС: {e}")
+            self.show_error.emit(f"Ошибка загрузки профилей ТС: {e}")
 
     @pyqtSlot()
-    def change_db_con_params(self):
+    def change_db_connection(self):
+        """Запрос на изменение параметров БД"""
         self.reconnect_requested.emit()
 
     @pyqtSlot()
+    def reconnect_with_new_params(self):
+        """Переподключение с новыми параметрами (будет вызвано из plugin_controller)"""
+
+        self._load_db_params()
+        self.show_info.emit("Параметры подключения к БД обновлены")
+
+    @pyqtSlot()
     def rebuild_graph(self):
+        """Запросить перестроение графа"""
         self.graph_rebuild_requested.emit()
 
     @pyqtSlot()
     def start_profile_create(self):
-        self.__settings_model.current_profile_id = None
-        self.__settings_dialog.clear_profile_form()
-        self.__settings_model.editing_mode = FormMode.EDIT
-        self.__settings_dialog.focus_profile_name()
+        """Начать создание нового профиля"""
+        self._model.current_profile_id = None
+        self._model.current_profile_data = None
+        self._model.editing_mode = FormMode.EDIT
 
     @pyqtSlot()
     def start_profile_edit(self):
-        if self.__settings_model.current_profile_id is None:
+        """Начать редактирование текущего профиля"""
+        if self._model.current_profile_id is None:
             return
-
-        self.__settings_model.editing_mode = FormMode.EDIT
-        self.__settings_dialog.focus_profile_name()
+        self._model.editing_mode = FormMode.EDIT
 
     @pyqtSlot()
     def cancel_profile_edit(self):
-        profile_id = self.__settings_model.current_profile_id
+        """Отменить редактирование профиля"""
+        if self._model.current_profile_id is None:
+            self._model.editing_mode = FormMode.EMPTY
+            return
+
+        self._load_current_profile_data()
+        self._model.editing_mode = FormMode.VIEW
+
+    def _load_current_profile_data(self):
+        """Загрузить данные текущего профиля в модель"""
+        if self._model.current_profile_id is None:
+            self._model.current_profile_data = None
+            return
+        try:
+            profile = self._service.get_profile_by_id(self._model.current_profile_id)
+            self._model.current_profile_data = profile
+        except Exception as e:
+            self.show_error.emit(f"Ошибка загрузки профиля: {e}")
+            self._model.current_profile_data = None
+
+    @pyqtSlot(int)
+    def select_profile(self, profile_id: Optional[int]):
+        """Выбрать профиль для просмотра/редактирования"""
+        self._model.current_profile_id = profile_id
         if profile_id is None:
-            self.__settings_dialog.clear_profile_form()
-            self.__settings_model.editing_mode = FormMode.EMPTY
+            self._model.current_profile_data = None
+            self._model.editing_mode = FormMode.EMPTY
             return
 
-        self.__load_profile_to_form(profile_id)
-        self.__settings_model.editing_mode = FormMode.VIEW
+        self._load_current_profile_data()
+        self._model.editing_mode = FormMode.VIEW
 
-    @pyqtSlot(object)
-    def select_profile(self, profile_id: int | None):
-        self.__settings_model.current_profile_id = profile_id
-
-        if profile_id is None:
-            self.__settings_dialog.clear_profile_form()
-            self.__settings_model.editing_mode = FormMode.EMPTY
+    @pyqtSlot(str, object, float, float, float, float)
+    def save_profile(self, name: str, vehicle_type: VehicleType, height: float, width: float, depth: float,
+                     weight: float):
+        """Сохранить профиль"""
+        if not self._model.is_editing_enabled:
             return
 
-        self.__load_profile_to_form(profile_id)
-        self.__settings_model.editing_mode = FormMode.VIEW
-
-    def save_profile(
-            self,
-            name: str,
-            vehicle_type: VehicleType,
-            height: float,
-            width: float,
-            depth: float,
-            weight: float,
-    ):
-        if not self.__settings_model.is_editing_enabled:
-            return
-
-        if not name:
-            self.__settings_dialog.show_warning("Введите название для профиля!")
+        if not name or not name.strip():
+            self.show_warning.emit("Введите название профиля!")
             return
 
         try:
-            current_profile_id = self.__settings_model.current_profile_id
             profile = VehicleProfile(
-                name=name,
-                type=vehicle_type.name if isinstance(vehicle_type, VehicleType) else vehicle_type,
+                name=name.strip(),
+                type=vehicle_type.name,
                 height_m=height,
                 width_m=width,
                 depth_m=depth,
                 weight_t=weight,
             )
 
-            if current_profile_id is None:
-                new_profile_id = self.__settings_service.create_profile(
-                    name,
-                    vehicle_type,
-                    height,
-                    width,
-                    depth,
-                    weight,
-                )
-                self.__settings_model.current_profile_id = new_profile_id
-                message = "Профиль успешно создан!"
+            if self._model.current_profile_id is None:
+                # Создание нового профиля
+                profile_id = self._service.create_profile(name.strip(), vehicle_type, height, width, depth, weight)
+                self._model.current_profile_id = profile_id
+                self.show_info.emit("Профиль успешно создан!")
             else:
-                self.__settings_service.update_profile(current_profile_id, profile)
-                message = "Профиль успешно обновлен!"
+                # Обновление существующего
+                profile.id = self._model.current_profile_id
+                self._service.update_profile(self._model.current_profile_id, profile)
+                self.show_info.emit("Профиль успешно обновлен!")
 
-            self.__load_profiles()
-            self.__settings_model.editing_mode = FormMode.VIEW
-            self.__settings_dialog.show_info(message)
+            # Обновить список профилей
+            self._load_profiles()
+            self._load_current_profile_data()
+            self._model.editing_mode = FormMode.VIEW
+
         except Exception as e:
-            self.__settings_dialog.show_error(f"Ошибка сохранения профиля: {e}")
+            self.show_error.emit(f"Ошибка сохранения профиля: {e}")
 
     @pyqtSlot()
-    def delete_profile(self):
-        profile_id = self.__settings_model.current_profile_id
+    def request_delete_profile(self):
+        """Запросить подтверждение удаления профиля"""
+        profile_id = self._model.current_profile_id
         if profile_id is None:
             return
 
-        profile = self.__settings_service.get_profile_by_id(profile_id)
-        if profile is None:
-            self.cancel_profile_edit()
-            return
-
-        is_active = profile_id == self.__settings_model.active_profile_id
-        if not self.__settings_dialog.confirm_delete_profile(profile.name, is_active):
-            return
-
         try:
-            self.__settings_service.delete_profile(profile_id)
-
-            if is_active:
-                self.__settings_service.set_active_profile_id(None)
-                self.__settings_model.active_profile_id = None
-                self.profile_deleted.emit(profile_id)
-
-            self.__settings_model.current_profile_id = None
-            self.__settings_dialog.clear_profile_form()
-            self.__settings_model.editing_mode = FormMode.EMPTY
-            self.__load_profiles()
-            self.__settings_dialog.show_info("Профиль успешно удален!")
-        except Exception as e:
-            self.__settings_dialog.show_error(f"Ошибка удаления профиля: {e}")
-
-    @pyqtSlot(object)
-    def set_active_profile(self, profile_id: int | None):
-        if profile_id is None or self.__settings_model.active_profile_id == profile_id:
-            return
-
-        self.__settings_service.set_active_profile_id(profile_id)
-        self.__settings_model.active_profile_id = profile_id
-        self.__emit_active_profile_changed()
-
-    def __load_profile_to_form(self, profile_id: int):
-        try:
-            profile = self.__settings_service.get_profile_by_id(profile_id)
+            profile = self._service.get_profile_by_id(profile_id)
             if profile is None:
-                self.select_profile(None)
                 return
 
-            self.__settings_dialog.set_profile_form(profile)
+            is_active = profile_id == self._model.active_profile_id
+            self.request_delete_confirmation.emit(profile.name, is_active)
         except Exception as e:
-            self.__settings_dialog.show_error(f"Произошла ошибка при загрузке профиля ТС: {e}")
+            self.show_error.emit(f"Ошибка при запросе удаления профиля: {e}")
 
-    def __emit_active_profile_changed(self):
-        active_profile_id = self.__settings_model.active_profile_id
-        if active_profile_id is None:
+    @pyqtSlot()
+    def confirm_delete_profile(self):
+        """Подтвержденное удаление профиля"""
+        profile_id = self._model.current_profile_id
+        if profile_id is None:
             return
 
-        profile = self.__settings_service.get_profile_by_id(active_profile_id)
-        if profile is not None:
-            self.profile_changed.emit(profile)
+        try:
+            is_active = profile_id == self._model.active_profile_id
+            if is_active:
+                self._service.set_active_profile_id(None)
+                self._model.active_profile_id = None
+
+            self._service.delete_profile(profile_id)
+            self._model.current_profile_id = None
+            self._model.current_profile_data = None
+            self._model.editing_mode = FormMode.EMPTY
+
+            self._load_profiles()
+            self.show_info.emit("Профиль успешно удалён!")
+        except Exception as e:
+            self.show_error.emit(f"Ошибка удаления профиля: {e}")
+
+    @pyqtSlot()
+    def set_active_profile(self):
+        """Установить текущий профиль как активный"""
+        profile_id = self._model.current_profile_id
+        if profile_id is None:
+            return
+
+        if self._model.active_profile_id == profile_id:
+            return
+
+        try:
+            self._service.set_active_profile_id(profile_id)
+            self._model.active_profile_id = profile_id
+            self.show_info.emit("Активный профиль изменен")
+        except Exception as e:
+            self.show_error.emit(f"Ошибка установки активного профиля: {e}")
+
+    def get_active_profile_id(self) -> Optional[int]:
+        """Получить ID активного профиля"""
+        return self._model.active_profile_id

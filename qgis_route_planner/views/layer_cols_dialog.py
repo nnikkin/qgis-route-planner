@@ -26,7 +26,7 @@ class LayerColumnsDialog(QDialog):
 
         self.setupUi()
 
-    def __connect_signals_slots(self):
+    def __connect_signals(self):
         self.__model.available_columns_changed.connect(self.__update_columns_table)
         self.__model.mappings_changed.connect(self.__update_columns_table)
 
@@ -68,7 +68,7 @@ class LayerColumnsDialog(QDialog):
 
         self.retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_signals_slots()
+        self.__connect_signals()
 
     def retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
