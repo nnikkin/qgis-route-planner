@@ -31,12 +31,12 @@ class SelectedPointCollection:
     def has_required_points(self) -> bool:
         pass
 
-    def _reindex(self):
+    def __reindex(self):
         """Обновляет поле order у каждой точки согласно их позиции в списке."""
         for index, point in enumerate(self.__points):
             point.order = index
 
-    def _insert_order(self, point_type: PointType) -> int:
+    def __insert_order(self, point_type: PointType) -> int:
         """Определяет порядковый номер для новой точки."""
         if point_type == PointType.START:
             return -1
@@ -52,7 +52,7 @@ class SelectedPointCollection:
         if not qgs_point_xy or not point_type or not node_id:
             raise BaseException("Для добавления требуются координаты, тип и ИД точки")
 
-        order = self._insert_order(point_type)
+        order = self.__insert_order(point_type)
         route_point = RoutePoint(
             id=self.__next_point_id,
             qgs_point_xy=qgs_point_xy,
@@ -65,12 +65,12 @@ class SelectedPointCollection:
         self.__points.append(route_point)
 
         self.__points.sort_by_order()
-        self._reindex()
+        self.__reindex()
 
     def remove_point(self, point_id: int) -> RoutePoint | None:
         point = self.__points.remove_by_id(point_id)
         if point:
-            self._reindex()
+            self.__reindex()
         return point
 
     def clear(self):
@@ -93,7 +93,7 @@ class SelectedPointCollection:
         for p in sorted_points:
             self.__points.append(p)
 
-        self._reindex()
+        self.__reindex()
         return target_point
 
     def has_required_points(self) -> bool:

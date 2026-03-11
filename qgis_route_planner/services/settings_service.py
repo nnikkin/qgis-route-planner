@@ -8,9 +8,9 @@ class SettingsService:
     """Сервис для работы с настройками плагина"""
 
     __SETTINGS_FILE = "qgis_route_planner.ini"
-    _GROUP_DB = "database"
-    _GROUP_PROFILES = "profiles"
-    _KEY_ACTIVE_PROFILE = "active_profile_id"
+    __GROUP_DB = "database"
+    __GROUP_PROFILES = "profiles"
+    __KEY_ACTIVE_PROFILE = "active_profile_id"
 
     def __init__(self, vehicle_repo: VehicleProfileRepository):
         self.__settings: QSettings = QSettings(self.__SETTINGS_FILE, QSettings.Format.IniFormat)
@@ -18,7 +18,7 @@ class SettingsService:
 
     # Работа с настройками БД
     def load_db_params(self) -> DbConnection | None:
-        self.__settings.beginGroup(self._GROUP_DB)
+        self.__settings.beginGroup(self.__GROUP_DB)
 
         host = self.__settings.value("host", "")
         port = self.__settings.value("port", "")
@@ -32,7 +32,7 @@ class SettingsService:
         return db if db.is_complete() else None
 
     def save_db_params(self, db: DbConnection):
-        self.__settings.beginGroup(self._GROUP_DB)
+        self.__settings.beginGroup(self.__GROUP_DB)
         self.__settings.setValue("host", db.host)
         self.__settings.setValue("port", db.port)
         self.__settings.setValue("database", db.database)
@@ -45,17 +45,17 @@ class SettingsService:
 
     # Работа с VehicleProfile
     def set_active_profile_id(self, profile_id: int | None):
-        self.__settings.beginGroup(self._GROUP_PROFILES)
+        self.__settings.beginGroup(self.__GROUP_PROFILES)
         if profile_id is not None:
-            self.__settings.setValue(self._KEY_ACTIVE_PROFILE, profile_id)
+            self.__settings.setValue(self.__KEY_ACTIVE_PROFILE, profile_id)
         else:
-            self.__settings.remove(self._KEY_ACTIVE_PROFILE)
+            self.__settings.remove(self.__KEY_ACTIVE_PROFILE)
         self.__settings.endGroup()
         self.__settings.sync()
 
     def get_active_profile_id(self) -> int | None:
-        self.__settings.beginGroup(self._GROUP_PROFILES)
-        value = self.__settings.value(self._KEY_ACTIVE_PROFILE, None)
+        self.__settings.beginGroup(self.__GROUP_PROFILES)
+        value = self.__settings.value(self.__KEY_ACTIVE_PROFILE, None)
         self.__settings.endGroup()
         return int(value) if value is not None else None
 

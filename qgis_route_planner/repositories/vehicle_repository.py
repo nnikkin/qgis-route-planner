@@ -19,7 +19,7 @@ class VehicleProfileRepository:
         """)
 
     @staticmethod
-    def _row_to_profile(row: tuple) -> VehicleProfile:
+    def __row_to_profile(row: tuple) -> VehicleProfile:
         return VehicleProfile(
             id=row[0],
             name=row[1],
@@ -35,7 +35,7 @@ class VehicleProfileRepository:
             "SELECT id, name, type, height_m, width_m, weight_t, depth_m "
             "FROM routing.vehicle_profiles"
         )
-        return [self._row_to_profile(row) for row in rows]
+        return [self.__row_to_profile(row) for row in rows]
 
     def get_by_id(self, profile_id: int) -> VehicleProfile | None:
         rows = self.__db.execute_query(
@@ -43,10 +43,10 @@ class VehicleProfileRepository:
             "FROM routing.vehicle_profiles WHERE id = %s",
             profile_id
         )
-        return self._row_to_profile(rows[0]) if rows else None
+        return self.__row_to_profile(rows[0]) if rows else None
 
     def add_profile(self, profile: VehicleProfile) -> int:
-        next_id = self._get_next_id()
+        next_id = self.__get_next_id()
         self.__db.execute_nonquery(
             "INSERT INTO routing.vehicle_profiles (id, name, type, height_m, width_m, weight_t, depth_m) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
@@ -68,7 +68,7 @@ class VehicleProfileRepository:
              profile.weight_t, profile.depth_m, profile_id
         )
 
-    def _get_next_id(self) -> int:
+    def __get_next_id(self) -> int:
         rows = self.__db.execute_query("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM routing.vehicle_profiles")
         if not rows or rows[0][0] is None:
             return 1

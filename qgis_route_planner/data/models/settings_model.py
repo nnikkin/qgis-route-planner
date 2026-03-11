@@ -8,6 +8,7 @@ class FormMode(Enum):
     EMPTY = 0
     VIEW = 1
     EDIT = 2
+    CREATE = 3
 
 
 class SettingsModel(QObject):
@@ -78,10 +79,6 @@ class SettingsModel(QObject):
     def editing_mode(self, value: FormMode):
         self.__editing_mode = value
         self.editing_mode_changed.emit(value)
-
-    @property
-    def is_editing_enabled(self) -> bool:
-        return self.__editing_mode == FormMode.EDIT
 
     @property
     def current_profile_data(self) -> VehicleProfile:

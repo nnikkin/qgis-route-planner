@@ -5,14 +5,15 @@ from qgis.PyQt.QtGui import QCursor
 from qgis.PyQt.QtCore import Qt
 
 from qgis.core import (
-    QgsGeometry, QgsPointXY, QgsWkbTypes,
+    QgsGeometry, QgsPointXY, QgsWkbTypes, QgsVectorLayer,
     QgsPalLayerSettings, QgsVectorLayerSimpleLabeling
 )
 from qgis.gui import (
     QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
 )
 
-from ..data.models.main_window_model import MainWindowModel
+from ..controllers import MainWindowController
+from ..data.models import MainWindowModel
 from ..data.route import RoutePoint, PointType
 from ..views.widgets import MapWidget, RouteListWidget
 
@@ -20,17 +21,15 @@ from ..views.widgets import MapWidget, RouteListWidget
 class PluginMainWindow(QtWidgets.QMainWindow):
     """Главное окно плагина"""
 
-    def __init__(self, model: MainWindowModel, controller):
+    def __init__(self, model: MainWindowModel, controller: MainWindowController):
         super().__init__()
-        self.__model = model
-        self.__controller = controller
+        self.__model: MainWindowModel = model
+        self.__controller: MainWindowController = controller
 
         self.__point_markers: dict[int, QgsVertexMarker] = {}
         self.__route_bands: list[list[QgsRubberBand]] = []
 
         self.setupUi()
-        self.__setup_map_tools()
-        self.__connect_signals()
 
     def setupUi(self):
         self.setObjectName("PluginMainWindow")
@@ -101,6 +100,9 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(self)
 
+        self.__setup_map_tools()
+        self.__connect_signals()
+
         self.mapView.show()
 
     def retranslateUi(self):
@@ -117,56 +119,57 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.graph_action.setText(_translate("MainWindow", "Настройки графа дорог"))
 
     def __setup_map_tools(self):
-        self._zoom_in_tool = QgsMapToolZoom(self.mapView, False)
-        self._zoom_out_tool = QgsMapToolZoom(self.mapView, True)
-        self._pan_tool = QgsMapToolPan(self.mapView)
+        self.__zoom_in_tool = QgsMapToolZoom(self.mapView, False)
+        self.__zoom_out_tool = QgsMapToolZoom(self.mapView, True)
+        self.__pan_tool = QgsMapToolPan(self.mapView)
 
         from ..views.widgets import SelectPointMapTool
-        self._select_tool = SelectPointMapTool(self.mapView)
+        self.__select_tool = SelectPointMapTool(self.mapView)
 
     def __connect_signals(self):
-        self.__model.points_changed.connect(self._on_points_changed)
-        self.__model.routes_changed.connect(self._on_routes_changed)
-        self.__model.active_route_changed.connect(self._on_active_route_changed)
-        self.__model.status_message_changed.connect(self._on_status_message_changed)
+        self.__model.points_changed.connect(self.__on_points_changed)
+        self.__model.routes_changed.connect(self.__on_routes_changed)
+        self.__model.active_route_changed.connect(self.__on_active_route_changed)
+        self.__model.status_message_changed.connect(self.__on_status_message_changed)
         self.__model.active_tab_changed.connect(self.tabWidget.setCurrentIndex)
         self.__model.clear_button_enabled_changed.connect(self.clear_list_button.setEnabled)
 
-        self.__controller.show_point_context_menu_requested.connect(self._show_context_menu_for_point)
-        self.__controller.routes_display_requested.connect(self._display_routes)
-        self.__controller.map_cleared.connect(self._clear_map_visuals)
-        self.__controller.point_marker_add_requested.connect(self._add_point_marker)
-        self.__controller.point_marker_remove_requested.connect(self._remove_point_marker)
-        self.__controller.point_marker_update_requested.connect(self._update_point_marker_color)
+        self.__controller.layers_obtained.connect(self.__initialize_map)
+        self.__controller.show_point_context_menu_requested.connect(self.__show_context_menu_for_point)
+        self.__controller.routes_display_requested.connect(self.__display_routes)
+        self.__controller.map_cleared.connect(self.__clear_map_visuals)
+        self.__controller.point_marker_add_requested.connect(self.__add_point_marker)
+        self.__controller.point_marker_remove_requested.connect(self.__remove_point_marker)
+        self.__controller.point_marker_update_requested.connect(self.__update_point_marker_color)
 
         self.__connect_ui_to_controller()
 
     def __connect_ui_to_controller(self):
         self.db_action.triggered.connect(
-            lambda: self.__controller._settings_controller.open_settings_dialog(0)
+            lambda: self.__controller.open_settings_dialog(0)
         )
         self.profiles_action.triggered.connect(
-            lambda: self.__controller._settings_controller.open_settings_dialog(1)
+            lambda: self.__controller.open_settings_dialog(1)
         )
         self.graph_action.triggered.connect(
-            lambda: self.__controller._settings_controller.open_settings_dialog(2)
+            lambda: self.__controller.open_settings_dialog(2)
         )
-        self.about_action.triggered.connect(self._open_about_dialog)
+        self.about_action.triggered.connect(self.__open_about_dialog)
 
-        self.mapView.zoom_in_btn.clicked.connect(lambda: self.mapView.setMapTool(self._zoom_in_tool))
-        self.mapView.zoom_out_btn.clicked.connect(lambda: self.mapView.setMapTool(self._zoom_out_tool))
-        self.mapView.pan_btn.clicked.connect(lambda: self.mapView.setMapTool(self._pan_tool))
+        self.mapView.zoom_in_btn.clicked.connect(lambda: self.mapView.setMapTool(self.__zoom_in_tool))
+        self.mapView.zoom_out_btn.clicked.connect(lambda: self.mapView.setMapTool(self.__zoom_out_tool))
+        self.mapView.pan_btn.clicked.connect(lambda: self.mapView.setMapTool(self.__pan_tool))
         self.mapView.select_route_points_btn.clicked.connect(
-            lambda: self.mapView.setMapTool(self._select_tool)
+            lambda: self.mapView.setMapTool(self.__select_tool)
         )
 
-        self._select_tool.pointClicked.connect(self.__controller.on_map_point_selected)
+        self.__select_tool.pointClicked.connect(self.__controller.on_map_point_selected)
         self.clear_list_button.clicked.connect(self.__controller.on_clear_everything)
         self.route_list_widget.route_selected.connect(self.__controller.on_route_selected)
         self.route_list_widget.route_save_requested.connect(self.__controller.on_save_route)
 
     @pyqtSlot(list)
-    def _on_points_changed(self, points: list[RoutePoint]):
+    def __on_points_changed(self, points: list[RoutePoint]):
         self.points_list_widget.clear()
         for route_point in points:
             if route_point.point_type == PointType.START:
@@ -183,18 +186,18 @@ class PluginMainWindow(QtWidgets.QMainWindow):
             self.points_list_widget.addItem(item)
 
     @pyqtSlot(list)
-    def _on_routes_changed(self, routes: list):
+    def __on_routes_changed(self, routes: list):
         self.route_list_widget.clear()
         for i, route in enumerate(routes):
-            info = self._get_route_info(route)
+            info = self.__get_route_info(route)
             self.route_list_widget.add_page(i, route, info)
 
     @pyqtSlot(int)
-    def _on_active_route_changed(self, index: int):
-        self._highlight_routes(index)
+    def __on_active_route_changed(self, index: int):
+        self.__highlight_routes(index)
 
     @pyqtSlot(str)
-    def _on_status_message_changed(self, message: str):
+    def __on_status_message_changed(self, message: str):
         """Обрабатывает статусные сообщения и коды ошибок от контроллера."""
         error_messages = {
             "error:snap": (
@@ -216,15 +219,14 @@ class PluginMainWindow(QtWidgets.QMainWindow):
                 QMessageBox.Yes | QMessageBox.No,
             )
             if q == QMessageBox.Yes:
-                self.__controller._settings_controller.open_settings_dialog(1)
+                self.__controller.open_settings_dialog(1)
         elif message in error_messages and error_messages[message]:
             QMessageBox.warning(self, "Ошибка", error_messages[message])
         else:
             self.statusBar().showMessage(message)
 
-
-    @pyqtSlot(QgsPointXY, int)
-    def _show_context_menu_for_point(self, point: QgsPointXY, node_id: int):
+    @pyqtSlot(object, int)
+    def __show_context_menu_for_point(self, point: QgsPointXY, node_id: int):
         points = self.__model.points
         has_start = any(p.point_type == PointType.START for p in points)
         has_end = any(p.point_type == PointType.END for p in points)
@@ -246,8 +248,8 @@ class PluginMainWindow(QtWidgets.QMainWindow):
 
         menu.exec_(QCursor.pos())
 
-    @pyqtSlot(RoutePoint)
-    def _add_point_marker(self, route_point: RoutePoint):
+    @pyqtSlot(object)
+    def __add_point_marker(self, route_point: RoutePoint):
         marker = QgsVertexMarker(self.mapView)
         marker.setCenter(route_point.qgs_point_xy)
         marker.setIconType(QgsVertexMarker.IconType.ICON_CIRCLE)
@@ -255,28 +257,28 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         marker.setPenWidth(
             3 if route_point.point_type in {PointType.START, PointType.END} else 2
         )
-        self._set_marker_color(marker, route_point.point_type)
+        self.__set_marker_color(marker, route_point.point_type)
         marker.show()
         self.__point_markers[route_point.id] = marker
 
     @pyqtSlot(int)
-    def _remove_point_marker(self, point_id: int):
+    def __remove_point_marker(self, point_id: int):
         marker = self.__point_markers.pop(point_id, None)
         if marker:
             self.mapView.scene().removeItem(marker)
 
     @pyqtSlot(int)
-    def _update_point_marker_color(self, point_id: int):
+    def __update_point_marker_color(self, point_id: int):
         marker = self.__point_markers.get(point_id)
         if not marker:
             return
         point = next((p for p in self.__model.points if p.id == point_id), None)
         if point:
-            self._set_marker_color(marker, point.point_type)
+            self.__set_marker_color(marker, point.point_type)
 
     @pyqtSlot(list)
-    def _display_routes(self, routes: list):
-        self._clear_route_bands()
+    def __display_routes(self, routes: list):
+        self.__clear_route_bands()
         if not routes:
             return
 
@@ -301,10 +303,10 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         if extent:
             self.mapView.setExtent(extent)
 
-        self._highlight_routes(0)
+        self.__highlight_routes(0)
         self.mapView.refresh()
 
-    def _highlight_routes(self, active_index: int):
+    def __highlight_routes(self, active_index: int):
         for i, band_list in enumerate(self.__route_bands):
             is_active = (i == active_index)
             for band in band_list:
@@ -314,23 +316,22 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.mapView.refresh()
 
     @pyqtSlot()
-    def _clear_map_visuals(self):
+    def __clear_map_visuals(self):
         for marker in self.__point_markers.values():
             self.mapView.scene().removeItem(marker)
         self.__point_markers.clear()
-        self._clear_route_bands()
+        self.__clear_route_bands()
         self.points_list_widget.clear()
         self.route_list_widget.clear()
 
-    def _clear_route_bands(self):
+    def __clear_route_bands(self):
         for band_list in self.__route_bands:
             for band in band_list:
                 self.mapView.scene().removeItem(band)
         self.__route_bands = []
 
-
-    # Вспомогательное
-    def initialize_map(self, layers: list):
+    @pyqtSlot(list)
+    def __initialize_map(self, layers: list[QgsVectorLayer]):
         """Принимает слои от контроллера и устанавливает их на карту."""
         self.mapView.set_layers(layers)
         for layer in layers:
@@ -342,7 +343,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
                 layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
                 layer.triggerRepaint()
 
-    def _set_marker_color(self, marker: QgsVertexMarker, point_type: PointType):
+    def __set_marker_color(self, marker: QgsVertexMarker, point_type: PointType):
         colors = {
             PointType.START: Qt.green,
             PointType.END: Qt.red,
@@ -350,7 +351,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         }
         marker.setColor(colors.get(point_type, Qt.black))
 
-    def _get_route_info(self, route: list[dict]) -> dict:
+    def __get_route_info(self, route: list[dict]) -> dict:
         if not route:
             return {'distance_km': 0, 'time_minutes': 0, 'segments': 0}
         return {
@@ -359,7 +360,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
             'segments': len(route),
         }
 
-    def _open_about_dialog(self):
+    def __open_about_dialog(self):
         QMessageBox.information(
             self, "О модуле",
             """<html><body>
