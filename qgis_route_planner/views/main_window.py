@@ -1,6 +1,6 @@
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import pyqtSlot
-from qgis.PyQt.QtWidgets import QAction, QMenu, QMessageBox
+from qgis.PyQt.QtWidgets import QAction, QMenu
 from qgis.PyQt.QtGui import QCursor
 from qgis.PyQt.QtCore import Qt
 
@@ -16,9 +16,10 @@ from ..controllers import MainWindowController
 from ..data.models import MainWindowModel
 from ..data.route import RoutePoint, PointType
 from ..views.widgets import MapWidget, RouteListWidget
+from ..views import MessageBoxMixin
 
 
-class PluginMainWindow(QtWidgets.QMainWindow):
+class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
     """Главное окно плагина"""
 
     def __init__(self, model: MainWindowModel, controller: MainWindowController):
@@ -35,12 +36,12 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.setObjectName("PluginMainWindow")
         self.resize(800, 600)
 
-        self.centralwidget = QtWidgets.QWidget(self)
-        self.gridLayout_3 = QtWidgets.QGridLayout(self.centralwidget)
+        self.central_widget = QtWidgets.QWidget(self)
+        self.gridLayout_3 = QtWidgets.QGridLayout(self.central_widget)
 
         self.verticalLayout = QtWidgets.QVBoxLayout()
 
-        self.tabWidget = QtWidgets.QTabWidget(self.centralwidget)
+        self.tabWidget = QtWidgets.QTabWidget(self.central_widget)
         self.tabWidget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
             QtWidgets.QSizePolicy.Policy.Expanding
@@ -62,7 +63,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
 
         self.verticalLayout.addWidget(self.tabWidget)
 
-        self.clear_list_button = QtWidgets.QPushButton("Построить новый маршрут", self.centralwidget)
+        self.clear_list_button = QtWidgets.QPushButton("Построить новый маршрут", self.central_widget)
         self.clear_list_button.setEnabled(False)
         self.verticalLayout.addWidget(self.clear_list_button)
 
@@ -75,7 +76,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
             QtWidgets.QSizePolicy.Expanding
         )
         self.gridLayout_3.addWidget(self.mapView, 0, 0, 1, 1)
-        self.setCentralWidget(self.centralwidget)
+        self.setCentralWidget(self.central_widget)
 
         # Меню
         self.menubar = QtWidgets.QMenuBar(self)
@@ -101,7 +102,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         QtCore.QMetaObject.connectSlotsByName(self)
 
         self.__setup_map_tools()
-        self.__connect_signals()
+        self.__connect()
 
         self.mapView.show()
 
@@ -124,9 +125,10 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.__pan_tool = QgsMapToolPan(self.mapView)
 
         from ..views.widgets import SelectPointMapTool
-        self.__select_tool = SelectPointMapTool(self.mapView)
+        self.__select_route_point_tool = SelectPointMapTool(self.mapView)
+        self.__restr_edit_tool = SelectPointMapTool(self.mapView)
 
-    def __connect_signals(self):
+    def __connect(self):
         self.__model.points_changed.connect(self.__on_points_changed)
         self.__model.routes_changed.connect(self.__on_routes_changed)
         self.__model.active_route_changed.connect(self.__on_active_route_changed)
@@ -141,6 +143,9 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.__controller.point_marker_add_requested.connect(self.__add_point_marker)
         self.__controller.point_marker_remove_requested.connect(self.__remove_point_marker)
         self.__controller.point_marker_update_requested.connect(self.__update_point_marker_color)
+        self.__controller.restriction_point_added.connect(self.__add_restriction_point_marker)
+        self.__controller.restriction_band_added.connect(self.__display_restriction_band)
+        self.__controller.restriction_band_cleared.connect(self.__clear_restriction_band)
 
         self.__connect_ui_to_controller()
 
@@ -160,10 +165,13 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.mapView.zoom_out_btn.clicked.connect(lambda: self.mapView.setMapTool(self.__zoom_out_tool))
         self.mapView.pan_btn.clicked.connect(lambda: self.mapView.setMapTool(self.__pan_tool))
         self.mapView.select_route_points_btn.clicked.connect(
-            lambda: self.mapView.setMapTool(self.__select_tool)
+            lambda: self.mapView.setMapTool(self.__select_route_point_tool)
+        )
+        self.mapView.open_restriction_dialog_btn.clicked.connect(
+            self.__activate_restriction_mode
         )
 
-        self.__select_tool.pointClicked.connect(self.__controller.on_map_point_selected)
+        self.__select_route_point_tool.pointClicked.connect(self.__controller.on_map_point_selected)
         self.clear_list_button.clicked.connect(self.__controller.on_clear_everything)
         self.route_list_widget.route_selected.connect(self.__controller.on_route_selected)
         self.route_list_widget.route_save_requested.connect(self.__controller.on_save_route)
@@ -198,7 +206,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
 
     @pyqtSlot(str)
     def __on_status_message_changed(self, message: str):
-        """Обрабатывает статусные сообщения и коды ошибок от контроллера."""
+        """Обрабатывает статусные сообщения и коды ошибок от контроллера"""
         error_messages = {
             "error:snap": (
                 "Не удалось привязать точку к дорожной сети.\n"
@@ -212,21 +220,20 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         }
 
         if message == "error:no_profile":
-            q = QMessageBox.question(
-                self, "Внимание",
-                "Сначала создайте и выберите профиль транспортного средства."
-                "\nВы хотите перейти в настройки модуля?",
-                QMessageBox.Yes | QMessageBox.No,
+            q = self._show_question(
+                "Сначала нужно создать профиль транспортного средства."
+                "\nВы хотите перейти в настройки модуля?"
             )
-            if q == QMessageBox.Yes:
+            if q:
                 self.__controller.open_settings_dialog(1)
         elif message in error_messages and error_messages[message]:
-            QMessageBox.warning(self, "Ошибка", error_messages[message])
+            self._show_warning(error_messages[message])
         else:
             self.statusBar().showMessage(message)
 
     @pyqtSlot(object, int)
     def __show_context_menu_for_point(self, point: QgsPointXY, node_id: int):
+        """Показать контекстное меню точки"""
         points = self.__model.points
         has_start = any(p.point_type == PointType.START for p in points)
         has_end = any(p.point_type == PointType.END for p in points)
@@ -250,6 +257,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
 
     @pyqtSlot(object)
     def __add_point_marker(self, route_point: RoutePoint):
+        """Добавить маркер на карту"""
         marker = QgsVertexMarker(self.mapView)
         marker.setCenter(route_point.qgs_point_xy)
         marker.setIconType(QgsVertexMarker.IconType.ICON_CIRCLE)
@@ -263,12 +271,14 @@ class PluginMainWindow(QtWidgets.QMainWindow):
 
     @pyqtSlot(int)
     def __remove_point_marker(self, point_id: int):
+        """Убрать маркер с карты"""
         marker = self.__point_markers.pop(point_id, None)
         if marker:
             self.mapView.scene().removeItem(marker)
 
     @pyqtSlot(int)
     def __update_point_marker_color(self, point_id: int):
+        """Изменить цвет маркера"""
         marker = self.__point_markers.get(point_id)
         if not marker:
             return
@@ -278,6 +288,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
 
     @pyqtSlot(list)
     def __display_routes(self, routes: list):
+        """Метод для отображения маршрутов на карте"""
         self.__clear_route_bands()
         if not routes:
             return
@@ -307,6 +318,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
         self.mapView.refresh()
 
     def __highlight_routes(self, active_index: int):
+        """Подсветка маршрута"""
         for i, band_list in enumerate(self.__route_bands):
             is_active = (i == active_index)
             for band in band_list:
@@ -332,7 +344,7 @@ class PluginMainWindow(QtWidgets.QMainWindow):
 
     @pyqtSlot(list)
     def __initialize_map(self, layers: list[QgsVectorLayer]):
-        """Принимает слои от контроллера и устанавливает их на карту."""
+        """Принимает слои от контроллера и устанавливает их на карту"""
         self.mapView.set_layers(layers)
         for layer in layers:
             if 'graph_edges' in layer.name() and layer.fields().indexOf('name') >= 0:
@@ -344,14 +356,17 @@ class PluginMainWindow(QtWidgets.QMainWindow):
                 layer.triggerRepaint()
 
     def __set_marker_color(self, marker: QgsVertexMarker, point_type: PointType):
+        """Установить цвет маркера"""
         colors = {
             PointType.START: Qt.green,
-            PointType.END: Qt.red,
+            PointType.END: Qt.orange,
             PointType.WAYPOINT: Qt.black,
+            PointType.RESTRICTION: Qt.Red
         }
         marker.setColor(colors.get(point_type, Qt.black))
 
     def __get_route_info(self, route: list[dict]) -> dict:
+        """Получить информацию по маршруту"""
         if not route:
             return {'distance_km': 0, 'time_minutes': 0, 'segments': 0}
         return {
@@ -360,15 +375,74 @@ class PluginMainWindow(QtWidgets.QMainWindow):
             'segments': len(route),
         }
 
+    def __activate_restriction_mode(self):
+        """Активировать режим выбора точек для ограничений"""
+        self.mapView.setMapTool(self.__restr_edit_tool)
+        self.statusBar().showMessage("Режим выбора точек ограничений. Нажмите на карту для выбора точки.")
+
+    def __on_restriction_point_clicked(self, point: QgsPointXY):
+        """Обработчик клика для выбора точки ограничения"""
+        self.mapView.setMapTool(self.__pan_tool)
+        self.statusBar().clearMessage()
+
+        # Привязываем точку к дороге
+        snapped = self.__controller._routing_service.snap_point_to_road(point)
+        if not snapped:
+            self._show_warning("Точка не привязана к дорожной сети!")
+            return
+
+        snapped_point, node_id = snapped
+
+        if self.__restriction_dialog:
+            self.__restriction_dialog.add_node_to_list(node_id, snapped_point.x(), snapped_point.y())
+            self.__restriction_dialog.show()
+        else:
+            QMessageBox
+
+    def __add_restriction_point_marker(self, node_id: int, x: float, y: float):
+        """Добавить маркер точки ограничения на карту"""
+        marker = QgsVertexMarker(self.mapView)
+        marker.setCenter(QgsPointXY(x, y))
+        marker.setIconType(QgsVertexMarker.IconType.ICON_CROSS)
+        marker.setColor(Qt.red)
+        marker.setIconSize(12)
+        marker.setPenWidth(2)
+        marker.show()
+
+        if not self.__restriction_markers:
+            self.__restriction_markers = {}
+        self.__restriction_markers[node_id] = marker
+
+    def __display_restriction_band(self, route: list[dict]):
+        """Отобразить ограничения линией"""
+        self.__clear_restriction_band()
+
+        band = QgsRubberBand(self.mapView, QgsWkbTypes.LineGeometry)
+        band.setColor(Qt.red)
+        band.setWidth(4)
+
+        for edge in route:
+            geom = QgsGeometry.fromWkt(edge["geom"])
+            if not geom.isNull():
+                band.addGeometry(geom, None)
+
+        self.__restriction_band = band
+
+    def __clear_restriction_band(self):
+        """Очистить линию ограничений"""
+        if self.__restriction_band:
+            self.mapView.scene().removeItem(self.__restriction_band)
+            self.__restriction_band = None
+
     def __open_about_dialog(self):
-        QMessageBox.information(
-            self, "О модуле",
+        self._show_non_modal(
             """<html><body>
-            <p>В проекте используется набор иконок Fugue Icons.<br>
-            (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>.
-            All rights reserved.</p>
-            <p>Лицензия: 
+                    <p>В проекте используется набор иконок Fugue Icons.<br>
+                    (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>.
+                    All rights reserved.</p>
+                    <p>Лицензия: 
             <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a></p>
-            </body></html>""",
-            QMessageBox.Ok
+                    </body></html>
+                    """,
+            "О модуле"
         )

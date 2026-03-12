@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from qgis.PyQt import QtCore, QtWidgets
-from qgis.PyQt.QtGui import QRegExpValidator
-from qgis.PyQt.QtCore import QRegExp, QObject, pyqtSlot
-from qgis.PyQt.QtWidgets import QMessageBox, QDialog
+from qgis.PyQt import QtWidgets
+from qgis.PyQt.QtGui import QRegExpValidator, QCursor
+from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QMetaObject, QCoreApplication, pyqtSlot
 
+from ..views import MessageBoxMixin
 from ..controllers import InitDialogsController
 from ..data.models import DbConfigModel
 
 
-class ConnectionConfigDialog(QDialog):
+class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     """Диалоговое окно подключения к БД"""
 
     def __init__(
@@ -30,7 +30,7 @@ class ConnectionConfigDialog(QDialog):
 
         self.__setupUi()
 
-    def __connect_signals(self):
+    def __connect(self):
         self.host_edit.textChanged.connect(self.__controller.change_host_value)
         self.port_edit.textChanged.connect(self.__controller.change_port_value)
         self.username_edit.textChanged.connect(self.__controller.change_username_value)
@@ -139,18 +139,18 @@ class ConnectionConfigDialog(QDialog):
         self.gridLayout.addLayout(self.formLayout_3, 0, 0, 1, 1)
 
         self.buttonBox = QtWidgets.QDialogButtonBox(self)
-        self.buttonBox.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.buttonBox.setOrientation(Qt.Orientation.Horizontal)
         self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.StandardButton.Cancel |
                                           QtWidgets.QDialogButtonBox.StandardButton.Ok)
         self.buttonBox.setObjectName("buttonBox")
         self.gridLayout.addWidget(self.buttonBox, 1, 0, 1, 1)
 
         self.__retranslateUi()
-        QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_signals()
+        QMetaObject.connectSlotsByName(self)
+        self.__connect()
 
     def __retranslateUi(self):
-        _translate = QtCore.QCoreApplication.translate
+        _translate = QCoreApplication.translate
         self.setWindowTitle(_translate("Dialog", "Шаг 1: настройка подключения к БД"))
         self.label_12.setText(_translate("Dialog", "Адрес:"))
         self.host_edit.setPlaceholderText(_translate("Dialog", "Например, localhost"))
@@ -165,14 +165,11 @@ class ConnectionConfigDialog(QDialog):
 
     def closeEvent(self, event, **kwargs):
         if not self.__step_finished:
-            close_dialog = QMessageBox.question(
-                self,
-                "Внимание",
-                "Для продолжения требуется настроить подключение.\nВы уверены, что хотите закрыть мастер подключения?",
-                QMessageBox.Yes | QMessageBox.No
+            close_dialog = self._show_question(
+                "Для продолжения требуется настроить подключение.\nВы уверены, что хотите закрыть мастер подключения?"
             )
 
-            if close_dialog == QMessageBox.Yes:
+            if close_dialog:
                 self.__controller.initialization_cancelled()
                 event.accept()
             else:
@@ -214,18 +211,13 @@ class ConnectionConfigDialog(QDialog):
 
     @pyqtSlot(str)
     def __on_connection_failed(self, message: str):
-        QMessageBox.critical(self, "Ошибка подключения", message, QMessageBox.Ok)
+        self._show_critical("Ошибка подключения: " + message)
         self.check_con_button.setEnabled(True)
-        self.setCursor(QtCore.Qt.ArrowCursor)
+        self.setCursor(QCursor.ArrowCursor)
 
     def __on_accept(self):
         if not self.__controller.validate_connection_step():
-            QMessageBox.information(
-                self,
-                "",
-                "Заполните параметры подключения, нажмите \"Проверить подключение\" и выберите схему.",
-                QMessageBox.Ok,
-            )
+            self._show_info("Заполните параметры подключения, нажмите \"Проверить подключение\" и выберите схему.")
             return
 
         self.__step_finished = True

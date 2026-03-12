@@ -1,11 +1,12 @@
-from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 
+from . import BaseController
 from ..data.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel
 from ..utils import ColumnRole, GeometryType, LayerRole
 from ..services import SpatialDataService
 
 
-class InitDialogsController(QObject):
+class InitDialogsController(BaseController):
     con_test_requested = pyqtSignal()
     con_params_obtained = pyqtSignal()
     layers_selected = pyqtSignal()

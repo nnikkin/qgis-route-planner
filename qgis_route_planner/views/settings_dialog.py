@@ -1,30 +1,30 @@
 # -*- coding: utf-8 -*-
 from qgis.PyQt import QtCore, QtWidgets
-from qgis.PyQt.QtWidgets import QDialog, QMessageBox, QListWidgetItem
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
-from ..controllers import SettingsWindowController
+from ..views import MessageBoxMixin
+from ..controllers import SettingsDialogController
 from ..data.models import SettingsModel, FormMode
 from ..data.vehicle import VehicleProfile, VehicleType
 
 
-class SettingsDialog(QDialog):
+class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     """Окно настроек плагина"""
 
     def __init__(
             self,
             model: SettingsModel,
-            controller: SettingsWindowController,
+            controller: SettingsDialogController,
             parent: QObject = None
     ):
         super().__init__(parent)
 
-        self.__controller: SettingsWindowController = controller
+        self.__controller: SettingsDialogController = controller
         self.__model: SettingsModel = model
 
         self.setupUi()
 
-    def __connect_signals(self):
+    def __connect(self):
         """Подключение сигналов от контроллера и виджетов"""
         # Сигналы от контроллера к view
         self.__controller.open_page_requested.connect(self.__open_dialog)
@@ -301,13 +301,20 @@ class SettingsDialog(QDialog):
         spacerItem2 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout_3.addItem(spacerItem2)
         self.tabWidget.addTab(self.tabGraph, "")
+
+        self.tabRestrictions = QtWidgets.QWidget()
+        self.tabRestrictions.setObjectName("tabRestrictions")
+
+        self.tabWeather = QtWidgets.QWidget()
+        self.tabWeather.setObjectName("tabWeather")
+
         self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
         self.verticalLayout.addLayout(self.gridLayout)
 
         self.retranslateUi()
         self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_signals()
+        self.__connect()
 
         self.setTabOrder(self.tabWidget, self.dbHostnameEdit)
         self.setTabOrder(self.dbHostnameEdit, self.dbPortEdit)
@@ -364,6 +371,8 @@ class SettingsDialog(QDialog):
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabProfiles), _translate("Dialog", "Профили ТС"))
         self.rebuildGraphButton.setText(_translate("Dialog", "Перестроить граф дорог"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabGraph), _translate("Dialog", "Граф дорог"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabRestrictions), _translate("Dialog", "Ограничения"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabWeather), _translate("Dialog", "Погода"))
 
     # Слоты для сигналов от контроллера
     def __open_dialog(self, page_index: int):
@@ -371,25 +380,14 @@ class SettingsDialog(QDialog):
         self.tabWidget.setCurrentIndex(page_index)
         self.show()
 
-    def __show_warning(self, message: str):
-        QMessageBox.warning(self, "Предупреждение", message, QMessageBox.Ok)
-
-    def __show_info(self, message: str):
-        QMessageBox.information(self, "Информация", message, QMessageBox.Ok)
-
-    def __show_error(self, message: str):
-        QMessageBox.critical(self, "Ошибка", message, QMessageBox.Ok)
-
     def __confirm_delete_profile(self, profile_name: str, is_active: bool):
         """Показать диалог подтверждения удаления профиля"""
         msg = "Вы пытаетесь удалить активный профиль.\n" if is_active else ""
-        question = QMessageBox.question(
-            self,
-            "Подтверждение удаления",
+        confirm_delete = self._show_question(
             f"{msg}Вы уверены, что хотите удалить профиль '{profile_name}'?",
-            QMessageBox.Yes | QMessageBox.No
+            "Подтверждение удаления"
         )
-        if question == QMessageBox.Yes:
+        if confirm_delete:
             self.__controller.confirm_delete_profile()
 
     # Слоты для сигналов от модели
@@ -458,7 +456,7 @@ class SettingsDialog(QDialog):
 
         for profile in profiles_list:
             display_name = f"✓ {profile.name}" if profile.id == active_id else profile.name
-            item = QListWidgetItem(display_name)
+            item = QtWidgets.QListWidgetItem(display_name)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, profile.id)
             self.profilesListWidget.addItem(item)
             if profile.id == current_profile_id:
@@ -509,25 +507,19 @@ class SettingsDialog(QDialog):
     # Слоты для событий от виджетов
     def __on_change_db_clicked(self):
         """Обработчик нажатия на кнопку изменения БД"""
-        question = QMessageBox.question(
-            self,
-            "Внимание",
+        confirm_change = self._show_question(
             "Вы уверены, что хотите изменить настройки подключения к БД?",
-            QMessageBox.Yes | QMessageBox.No
         )
-        if question == QMessageBox.Yes:
+        if confirm_change:
             # Здесь должен быть вызов метода контроллера для изменения БД0-
             self.__controller.change_db_connection()
 
     def __on_rebuild_graph_clicked(self):
         """Обработчик нажатия на кнопку перестроения графа"""
-        question = QMessageBox.question(
-            self,
-            "Внимание",
-            "Вы уверены, что хотите перестроить граф?",
-            QMessageBox.Yes | QMessageBox.No
+        confirm_rebuild = self._show_question(
+            "Вы уверены, что хотите перестроить граф?"
         )
-        if question == QMessageBox.Yes:
+        if confirm_rebuild:
             self.__controller.rebuild_graph()
 
     def __on_save_profile_clicked(self):
@@ -569,13 +561,10 @@ class SettingsDialog(QDialog):
     def closeEvent(self, event):
         """Обработчик закрытия окна"""
         if self.__model.editing_mode == FormMode.EDIT or self.__model.editing_mode == FormMode.CREATE:
-            close_question = QMessageBox.question(
-                self,
-                "Внимание",
-                "Вы уверены, что хотите отменить несохранённые изменения и закрыть окно настроек?",
-                QMessageBox.Yes | QMessageBox.No
+            close_question = self._show_question(
+                "Вы уверены, что хотите отменить несохранённые изменения и закрыть окно настроек?"
             )
-            if close_question == QMessageBox.Yes:
+            if close_question:
                 self.__controller.cancel_profile_edit()
                 event.accept()
             else:

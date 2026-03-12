@@ -1,19 +1,44 @@
+from __future__ import annotations
+
 from ..data.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel, SettingsModel, MainWindowModel
+
 from ..repositories import (
     RoadGraphRepository,
     LayerRepository,
     VehicleProfileRepository,
+    RestrictionRepository,
     DbConnection,
 )
-from ..services import SpatialDataService, RoutingService, SettingsService
-from ..views import PluginMainWindow, ConnectionConfigDialog, SettingsDialog, LayersSelectDialog, LayerColumnsDialog
-from ..controllers import InitDialogsController, MainWindowController, SettingsWindowController
+from ..services import (
+    SpatialDataService,
+    RoutingService,
+    SettingsService,
+    RestrictionService
+)
 
-from qgis.PyQt.QtCore import QObject, pyqtSignal
+from ..views import (
+    PluginMainWindow,
+    ConnectionConfigDialog,
+    SettingsDialog,
+    LayersSelectDialog,
+    LayerColumnsDialog,
+    RestrictionDialog
+)
+
+from ..controllers import (
+    BaseController,
+    InitDialogsController,
+    MainWindowController,
+    SettingsDialogController,
+    RestrictionDialogController
+)
+
+from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.core import QgsTask, QgsApplication
 
-class PluginController(QObject):
+
+class PluginController(BaseController):
     """Контроллер плагина"""
 
     plugin_initialized = pyqtSignal()
@@ -31,9 +56,9 @@ class PluginController(QObject):
         self.__settings_model: SettingsModel = SettingsModel()
         self.__main_window_model: MainWindowModel = MainWindowModel()
 
-        self.__main_window_controller: MainWindowController = None
-        self.__settings_controller: SettingsWindowController = None
-        #self.__restriction_controller: RestrictionWindowController = None
+        self.__main_window_controller: MainWindowController | None = None
+        self.__settings_controller: SettingsDialogController | None = None
+        self.__restriction_controller: RestrictionDialogController | None = None
         self.__init_dialogs_controller: InitDialogsController = InitDialogsController(
             db_config_model=self.__db_config_model,
             layer_config_model=self.__layers_config_model,
@@ -52,28 +77,28 @@ class PluginController(QObject):
             model=self.__cols_config_model,
             controller=self.__init_dialogs_controller,
         )
-        self.__main_window: PluginMainWindow = None
-        self.__restriction_dialog = None
-        self.__settings_dialog: SettingsDialog = None
+        self.__main_window: PluginMainWindow | None = None
+        self.__restriction_dialog: RestrictionDialog | None = None
+        self.__settings_dialog: SettingsDialog | None = None
 
-        self.__db_connection: DbConnection = None
+        self.__db_connection: DbConnection | None = None
 
-        self.__settings_service: SettingsService = None
-        self.__spatial_data_service: SpatialDataService = None
-        self.__routing_service: RoutingService = None
-        #self.__restriction_service: RestrictionService = None
+        self.__settings_service: SettingsService | None = None
+        self.__spatial_data_service: SpatialDataService | None = None
+        self.__routing_service: RoutingService | None = None
+        self.__restriction_service: RestrictionService | None = None
 
-        self.__vehicle_repo: VehicleProfileRepository = None
-        self.__layer_repo: LayerRepository = None
-        self.__graph_repo: RoadGraphRepository = None
-        #self.__restriction_repo: RestrictionRepository = None
+        self.__vehicle_repo: VehicleProfileRepository | None = None
+        self.__layer_repo: LayerRepository | None = None
+        self.__graph_repo: RoadGraphRepository | None = None
+        self.__restriction_repo: RestrictionRepository | None = None
 
-        self.__old_db_connection: DbConnection = None
-        self.__old_db_config_model: DbConfigModel = None
-        self.__old_layers_config_model: LayerConfigModel = None
-        self.__old_cols_config_model: ColumnsConfigModel = None
+        self.__old_db_connection: DbConnection | None = None
+        self.__old_db_config_model: DbConfigModel | None = None
+        self.__old_layers_config_model: LayerConfigModel | None = None
+        self.__old_cols_config_model: ColumnsConfigModel | None = None
 
-        self.__connect_signals()
+        self.__connect()
 
     def first_start_initialize(self):
         self.__db_config_dialog.open()
@@ -81,7 +106,7 @@ class PluginController(QObject):
     def open_main_window(self):
         self.__main_window.show()
 
-    def __connect_signals(self):
+    def __connect(self):
         self.__init_dialogs_controller.con_test_requested.connect(self.__db_con_test)
         self.__init_dialogs_controller.con_params_obtained.connect(self.__db_con_created)
         self.__init_dialogs_controller.layers_selected.connect(self.__layers_selected)
@@ -104,10 +129,12 @@ class PluginController(QObject):
             model=self.__settings_model,
             controller=self.__settings_controller
         )
-        #self.__restriction_dialog =
+        self.__restriction_dialog = RestrictionDialog(
+            controller=self.__restriction_controller
+        )
 
     def __init_controllers(self):
-        self.__settings_controller = SettingsWindowController(
+        self.__settings_controller = SettingsDialogController(
             self.__settings_model,
             self.__settings_service
         )
@@ -120,19 +147,19 @@ class PluginController(QObject):
             self.__spatial_data_service,
             self.__routing_service,
         )
-        # self.__restriction_controller = RestrictionController(self.__settings_dialog, self.__restriction_service)
+        self.__restriction_controller = RestrictionDialogController(self.__restriction_service)
 
     def __init_repositories(self):
         self.__vehicle_repo = VehicleProfileRepository(self.__db_connection)
         self.__layer_repo = LayerRepository(self.__db_connection)
         self.__graph_repo = RoadGraphRepository(self.__db_connection, self.__layer_repo)
-        #self.__restriction_repo = RestrictionRepository(self.__db_connection)
+        self.__restriction_repo = RestrictionRepository(self.__db_connection)
 
     def __init_services(self):
         self.__settings_service = SettingsService(self.__vehicle_repo)
         self.__spatial_data_service = SpatialDataService(self.__layer_repo, self.__graph_repo, self.__vehicle_repo)
         self.__routing_service = RoutingService(self.__graph_repo)
-        #self.__restriction_service = RestrictionService(self.__restriction_repo)
+        self.__restriction_service = RestrictionService(self.__restriction_repo)
 
     def __init_everything(self):
         self.__init_repositories()
@@ -236,7 +263,6 @@ class PluginController(QObject):
                 QMessageBox.Ok
             )
             self.crit_plugin_error.emit()
-
 
     def __on_topology_build_finished(self):
         self.plugin_initialized.emit()

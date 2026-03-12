@@ -1,8 +1,11 @@
 <RCC>
   <qresource prefix="/plugins/qgis_route_planner">
+    <file alias="cross_white">png_resources/icons/cross-white.png</file>
     <file alias="plugin_icon">png_resources/icon.png</file>
   </qresource>
   <qresource prefix="map_icons">
+    <file alias="time_restr">png_resources/icons/clock-minus.png</file>
+    <file alias="dimen_restr">png_resources/icons/construction.png</file>
     <file alias="map_add_point">png_resources/icons/marker--plus.png</file>
     <file alias="map_move">png_resources/icons/arrow-move.png</file>
     <file alias="map_zoomin">png_resources/icons/magnifier-zoom-in.png</file>

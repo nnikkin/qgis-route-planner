@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
-from qgis.PyQt.QtWidgets import QMessageBox, QDialog
 
+from ..views import MessageBoxMixin
 from ..controllers import InitDialogsController
 from ..data.models import ColumnsConfigModel
 from ..data.models.cols_config_model import ColumnInfo
 from ..utils import ColumnRole
 
 
-class LayerColumnsDialog(QDialog):
+class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
     """Диалоговое окно для сопоставления полей таблиц и их атрибутов"""
 
     def __init__(
@@ -26,7 +26,7 @@ class LayerColumnsDialog(QDialog):
 
         self.setupUi()
 
-    def __connect_signals(self):
+    def __connect(self):
         self.__model.available_columns_changed.connect(self.__update_columns_table)
         self.__model.mappings_changed.connect(self.__update_columns_table)
 
@@ -68,7 +68,7 @@ class LayerColumnsDialog(QDialog):
 
         self.retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_signals()
+        self.__connect()
 
     def retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
@@ -84,14 +84,10 @@ class LayerColumnsDialog(QDialog):
             event.accept()
             return
 
-        close_question = QMessageBox.question(
-            self,
-            "Внимание",
-            "Для продолжения требуется выполнить настройку полей.\nВы уверены, что хотите закрыть мастер подключения?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+        close_question = self._show_question(
+            "Для продолжения требуется выполнить настройку полей.\nВы уверены, что хотите закрыть мастер подключения?"
         )
-        if close_question == QMessageBox.Yes:
+        if close_question:
             self.__controller.initialization_cancelled()
             event.accept()
         else:
@@ -102,7 +98,7 @@ class LayerColumnsDialog(QDialog):
 
     @pyqtSlot(str)
     def __on_column_config_failed(self, message: str):
-        QMessageBox.warning(self, "Ошибка", message, QMessageBox.Ok)
+        self._show_error(message)
 
     def __accept_step(self):
         self.__step_finished = True

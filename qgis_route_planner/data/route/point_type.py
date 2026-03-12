@@ -5,3 +5,4 @@ class PointType(Enum):
     START = "start"
     WAYPOINT = "waypoint"
     END = "end"
+    RESTRICTION = "restriction"
