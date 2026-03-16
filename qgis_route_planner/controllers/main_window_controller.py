@@ -1,17 +1,22 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
 
-from ..data.models.main_window_model import MainWindowModel
+if TYPE_CHECKING:
+    from ..data.models.main_window_model import MainWindowModel
+    from .settings_dialog_controller import SettingsDialogController
+    from .restriction_dialog_controller import RestrictionDialogController
+    from ..services import SpatialDataService, RoutingService
+
 from ..data.route import SelectedPointCollection, PointType
-from ..services import SpatialDataService, RoutingService
-from .settings_dialog_controller import SettingsDialogController
 
 from qgis.PyQt import Qt
 from qgis.PyQt.QtGui import QImage, QPainter
 from qgis.PyQt.QtCore import QObject, pyqtSlot, pyqtSignal, QSize
 from qgis.core import QgsPointXY, QgsMapSettings, QgsMapRendererCustomPainterJob, QgsGeometry
 
+from .base_controller import BaseController
 
-class MainWindowController(QObject):
+class MainWindowController(BaseController):
     """Контроллер главного окна"""
 
     layers_obtained = pyqtSignal(list)
@@ -21,7 +26,6 @@ class MainWindowController(QObject):
     point_marker_add_requested = pyqtSignal(object)
     point_marker_remove_requested = pyqtSignal(int)
     point_marker_update_requested = pyqtSignal(int)
-    open_settings_requested = pyqtSignal(int)
 
     restriction_point_added = pyqtSignal(int, float, float)
     restriction_band_added = pyqtSignal(list)  # список точек для отображения
@@ -31,15 +35,17 @@ class MainWindowController(QObject):
             self,
             model: MainWindowModel,
             settings_controller: SettingsDialogController,
-            db_service: SpatialDataService,
+            restr_controller: RestrictionDialogController,
+            data_service: SpatialDataService,
             routing_service: RoutingService,
     ):
         super().__init__()
 
         self.__model: MainWindowModel = model
         self.__settings_controller: SettingsDialogController = settings_controller
+        self.__restr_controller: RestrictionDialogController = restr_controller
 
-        self.__db_service: SpatialDataService = db_service
+        self.__data_service: SpatialDataService = data_service
         self.__routing_service: RoutingService = routing_service
 
         self.__current_route: SelectedPointCollection = SelectedPointCollection()
@@ -50,9 +56,12 @@ class MainWindowController(QObject):
     def open_settings_dialog(self, tab_index: int = 0):
         self.__settings_controller.open_dialog_tab(tab_index)
 
+    def open_restriction_dialog(self):
+        self.__restr_controller.open_dialog()
+
     def initialize_map(self, schema: str = "routing"):
         try:
-            layers = self.__db_service.get_spatial_layers(schema=schema)
+            layers = self.__data_service.get_spatial_layers(schema=schema)
             if not layers:
                 raise BaseException(f"В схеме '{schema}' не обнаружены таблицы с геоданными!")
             self.layers_obtained.emit(layers)
@@ -268,6 +277,12 @@ class MainWindowController(QObject):
         self.__model.active_tab = 1
         self.routes_display_requested.emit(routes)
 
+    @pyqtSlot(object)
+    def update_active_profile(self, profile):
+        """Обновляет активный профиль в модели главного окна"""
+        self.__model.active_profile = profile
+        print(f"В MainWindowController успешно обновлен активный профиль: {profile.name}")
+
     def on_add_restriction_point(self, point: QgsPointXY, node_id: int):
         """Добавить точку ограничения"""
         self.__restriction_points[node_id] = (point.x(), point.y())
@@ -303,3 +318,6 @@ class MainWindowController(QObject):
     def get_restriction_nodes(self) -> list[int]:
         """Получить список узлов с ограничениями"""
         return list(self.__restriction_points.keys())
+
+    def snap_point(self, point: QgsPointXY):
+        return self.__routing_service.snap_point_to_road(point)

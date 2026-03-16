@@ -1,14 +1,7 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
-from enum import Enum
 
 from ..vehicle import VehicleProfile
-
-
-class FormMode(Enum):
-    EMPTY = 0
-    VIEW = 1
-    EDIT = 2
-    CREATE = 3
+from ...utils import FormMode
 
 
 class SettingsModel(QObject):

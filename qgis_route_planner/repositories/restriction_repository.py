@@ -226,7 +226,8 @@ class RestrictionRepository:
 
         defaults = [
             (1, "dimension", "Габаритное"),
-            (2, "temporary", "Временное")
+            (2, "temporary", "Временное"),
+            (3, "simple", "Простое")
         ]
 
         for restriction_type_id, code, name in defaults:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from ..data.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel, SettingsModel, MainWindowModel
+from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtWidgets import QMessageBox
+from qgis.core import QgsTask, QgsApplication
 
 from ..repositories import (
     RoadGraphRepository,
@@ -15,6 +17,20 @@ from ..services import (
     SettingsService,
     RestrictionService
 )
+from ..data.models import (
+    DbConfigModel,
+    LayerConfigModel,
+    ColumnsConfigModel,
+    SettingsModel,
+    MainWindowModel,
+    RestrictionModel
+)
+
+from .base_controller import BaseController
+from .init_dialogs_controller import InitDialogsController
+from .main_window_controller import MainWindowController
+from .settings_dialog_controller import SettingsDialogController
+from .restriction_dialog_controller import RestrictionDialogController
 
 from ..views import (
     PluginMainWindow,
@@ -24,18 +40,6 @@ from ..views import (
     LayerColumnsDialog,
     RestrictionDialog
 )
-
-from ..controllers import (
-    BaseController,
-    InitDialogsController,
-    MainWindowController,
-    SettingsDialogController,
-    RestrictionDialogController
-)
-
-from qgis.PyQt.QtCore import pyqtSignal
-from qgis.PyQt.QtWidgets import QMessageBox
-from qgis.core import QgsTask, QgsApplication
 
 
 class PluginController(BaseController):
@@ -55,6 +59,7 @@ class PluginController(BaseController):
         self.__cols_config_model: ColumnsConfigModel = ColumnsConfigModel()
         self.__settings_model: SettingsModel = SettingsModel()
         self.__main_window_model: MainWindowModel = MainWindowModel()
+        self.__restriction_model: RestrictionModel = RestrictionModel()
 
         self.__main_window_controller: MainWindowController | None = None
         self.__settings_controller: SettingsDialogController | None = None
@@ -97,6 +102,7 @@ class PluginController(BaseController):
         self.__old_db_config_model: DbConfigModel | None = None
         self.__old_layers_config_model: LayerConfigModel | None = None
         self.__old_cols_config_model: ColumnsConfigModel | None = None
+        self.__old_restriction_model: RestrictionModel | None = None
 
         self.__connect()
 
@@ -130,6 +136,7 @@ class PluginController(BaseController):
             controller=self.__settings_controller
         )
         self.__restriction_dialog = RestrictionDialog(
+            model=self.__restriction_model,
             controller=self.__restriction_controller
         )
 
@@ -141,13 +148,22 @@ class PluginController(BaseController):
         self.__settings_controller.reconnect_requested.connect(self.__on_reconnect_requested)
         self.__settings_controller.graph_rebuild_requested.connect(self.__on_graph_rebuild_requested)
 
-        self.__main_window_controller = MainWindowController(
-            self.__main_window_model,
-            self.__settings_controller,
-            self.__spatial_data_service,
-            self.__routing_service,
+        self.__restriction_controller = RestrictionDialogController(
+            self.__restriction_model,
+            self.__restriction_service
         )
-        self.__restriction_controller = RestrictionDialogController(self.__restriction_service)
+
+        self.__main_window_controller = MainWindowController(
+            model=self.__main_window_model,
+            settings_controller=self.__settings_controller,
+            restr_controller=self.__restriction_controller,
+            data_service=self.__spatial_data_service,
+            routing_service=self.__routing_service,
+        )
+
+        self.__settings_controller.active_profile_changed.connect(
+            self.__main_window_controller.update_active_profile
+        )
 
     def __init_repositories(self):
         self.__vehicle_repo = VehicleProfileRepository(self.__db_connection)
@@ -319,6 +335,7 @@ class PluginController(BaseController):
         self.__old_db_config_model = self.__db_config_model
         self.__old_layers_config_model = self.__layers_config_model
         self.__old_cols_config_model = self.__cols_config_model
+        self.__old_restriction_model = self.__restriction_model
 
         try:
             self.__db_config_dialog.open()
@@ -336,11 +353,13 @@ class PluginController(BaseController):
         self.__db_config_model = self.__old_db_config_model
         self.__layers_config_model = self.__old_layers_config_model
         self.__cols_config_model = self.__old_cols_config_model
+        self.__restriction_model = self.__old_restriction_model
 
         self.__old_db_connection = None
         self.__old_db_config_model = None
         self.__old_layers_config_model = None
         self.__old_cols_config_model = None
+        self.__old_restriction_model = None
 
     def unload(self):
         if self.__main_window_controller is not None:

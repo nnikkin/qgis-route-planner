@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..controllers import InitDialogsController
+    from ..data.models import LayerConfigModel, Layer
+
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
-from ..views import MessageBoxMixin
-from ..controllers import InitDialogsController
-from ..data.models import LayerConfigModel
-from ..data.models.layer_config_model import Layer
+from .message_box_mixin import MessageBoxMixin
 from ..utils import GeometryType, LayerRole
 
 

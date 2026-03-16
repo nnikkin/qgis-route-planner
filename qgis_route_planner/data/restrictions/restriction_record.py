@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-
 @dataclass
 class RestrictionRecord:
     id: int | None = None

@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..controllers import InitDialogsController
 
 from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtGui import QRegExpValidator, QCursor
 from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QMetaObject, QCoreApplication, pyqtSlot
 
-from ..views import MessageBoxMixin
-from ..controllers import InitDialogsController
+from .message_box_mixin import MessageBoxMixin
 from ..data.models import DbConfigModel
-
 
 class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     """Диалоговое окно подключения к БД"""
@@ -21,8 +23,8 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     ):
         super().__init__(parent)
 
-        self.__model: DbConfigModel = model
-        self.__controller: InitDialogsController = controller
+        self.__model = model
+        self.__controller = controller
 
         self.__step_finished = False
 
@@ -213,7 +215,6 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __on_connection_failed(self, message: str):
         self._show_critical("Ошибка подключения: " + message)
         self.check_con_button.setEnabled(True)
-        self.setCursor(QCursor.ArrowCursor)
 
     def __on_accept(self):
         if not self.__controller.validate_connection_step():

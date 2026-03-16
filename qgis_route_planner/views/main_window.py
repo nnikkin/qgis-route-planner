@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..controllers import MainWindowController
+    from ..data.models import MainWindowModel
+
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import pyqtSlot
 from qgis.PyQt.QtWidgets import QAction, QMenu
@@ -9,14 +16,13 @@ from qgis.core import (
     QgsPalLayerSettings, QgsVectorLayerSimpleLabeling
 )
 from qgis.gui import (
-    QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
+    QgsMapTool, QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
 )
 
-from ..controllers import MainWindowController
-from ..data.models import MainWindowModel
 from ..data.route import RoutePoint, PointType
-from ..views.widgets import MapWidget, RouteListWidget
-from ..views import MessageBoxMixin
+from .widgets.map_widget import MapWidget
+from .widgets.route_list_widget import RouteListWidget
+from .message_box_mixin import MessageBoxMixin
 
 
 class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
@@ -26,9 +32,13 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         super().__init__()
         self.__model: MainWindowModel = model
         self.__controller: MainWindowController = controller
+        self.__restriction_dialog = None
 
         self.__point_markers: dict[int, QgsVertexMarker] = {}
         self.__route_bands: list[list[QgsRubberBand]] = []
+
+        self.__restriction_markers: dict[int, QgsVertexMarker] = {}
+        self.__restriction_band = None
 
         self.setupUi()
 
@@ -126,7 +136,6 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         from ..views.widgets import SelectPointMapTool
         self.__select_route_point_tool = SelectPointMapTool(self.mapView)
-        self.__restr_edit_tool = SelectPointMapTool(self.mapView)
 
     def __connect(self):
         self.__model.points_changed.connect(self.__on_points_changed)
@@ -359,9 +368,9 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         """Установить цвет маркера"""
         colors = {
             PointType.START: Qt.green,
-            PointType.END: Qt.orange,
+            PointType.END: Qt.magenta,
             PointType.WAYPOINT: Qt.black,
-            PointType.RESTRICTION: Qt.Red
+            PointType.RESTRICTION: Qt.red
         }
         marker.setColor(colors.get(point_type, Qt.black))
 
@@ -377,8 +386,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     def __activate_restriction_mode(self):
         """Активировать режим выбора точек для ограничений"""
-        self.mapView.setMapTool(self.__restr_edit_tool)
-        self.statusBar().showMessage("Режим выбора точек ограничений. Нажмите на карту для выбора точки.")
+        self.__controller.open_restriction_dialog()
 
     def __on_restriction_point_clicked(self, point: QgsPointXY):
         """Обработчик клика для выбора точки ограничения"""
@@ -386,7 +394,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.statusBar().clearMessage()
 
         # Привязываем точку к дороге
-        snapped = self.__controller._routing_service.snap_point_to_road(point)
+        snapped = self.__controller.snap_point(point)
         if not snapped:
             self._show_warning("Точка не привязана к дорожной сети!")
             return
@@ -396,8 +404,6 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         if self.__restriction_dialog:
             self.__restriction_dialog.add_node_to_list(node_id, snapped_point.x(), snapped_point.y())
             self.__restriction_dialog.show()
-        else:
-            QMessageBox
 
     def __add_restriction_point_marker(self, node_id: int, x: float, y: float):
         """Добавить маркер точки ограничения на карту"""
@@ -435,7 +441,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             self.__restriction_band = None
 
     def __open_about_dialog(self):
-        self._show_non_modal(
+        self._show_info(
             """<html><body>
                     <p>В проекте используется набор иконок Fugue Icons.<br>
                     (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>.
