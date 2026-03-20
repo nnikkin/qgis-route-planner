@@ -11,7 +11,7 @@ from ..data.route import SelectedPointCollection, PointType
 
 from qgis.PyQt import Qt
 from qgis.PyQt.QtGui import QImage, QPainter
-from qgis.PyQt.QtCore import QObject, pyqtSlot, pyqtSignal, QSize
+from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal, QSize
 from qgis.core import QgsPointXY, QgsMapSettings, QgsMapRendererCustomPainterJob, QgsGeometry
 
 from .base_controller import BaseController
@@ -27,6 +27,7 @@ class MainWindowController(BaseController):
     point_marker_remove_requested = pyqtSignal(int)
     point_marker_update_requested = pyqtSignal(int)
 
+    select_point_on_map_requested = pyqtSignal()
     restriction_point_added = pyqtSignal(int, float, float)
     restriction_band_added = pyqtSignal(list)  # список точек для отображения
     restriction_band_cleared = pyqtSignal()
@@ -44,6 +45,7 @@ class MainWindowController(BaseController):
         self.__model: MainWindowModel = model
         self.__settings_controller: SettingsDialogController = settings_controller
         self.__restr_controller: RestrictionDialogController = restr_controller
+        self.__restr_controller.select_point_on_map_requested.connect(self.select_point_on_map_requested.emit)
 
         self.__data_service: SpatialDataService = data_service
         self.__routing_service: RoutingService = routing_service
@@ -76,6 +78,7 @@ class MainWindowController(BaseController):
             return
 
         snapped_point, node_id = snapped
+
         self.show_point_context_menu_requested.emit(snapped_point, node_id)
 
     @pyqtSlot(QgsPointXY, PointType, int)
@@ -118,7 +121,7 @@ class MainWindowController(BaseController):
 
     def __save_route_to_file(self, route: list[dict]):
         """Формирование HTML-файла с выбранным маршрутом"""
-        # TODO: подключить к кнопке, сформировать файл с картинкой
+        # TODO: сформировать файл с картинкой
         from qgis.PyQt.QtWidgets import QFileDialog
 
         file_url, _ = QFileDialog.getSaveFileUrl(
@@ -289,6 +292,9 @@ class MainWindowController(BaseController):
         self.restriction_point_added.emit(node_id, point.x(), point.y())
         self.__update_restriction_band()
 
+    def cancel_add_restriction_point(self):
+        self.__restriction_points = None
+
     def __update_restriction_band(self):
         """Обновить линию, соединяющую точки ограничений по графу"""
         if len(self.__restriction_points) < 2:
@@ -297,7 +303,7 @@ class MainWindowController(BaseController):
             return
 
         node_ids = list(self.__restriction_points.keys())
-        # Находим маршрут между точками
+
         routes = []
         for i in range(len(node_ids) - 1):
             route = self.__routing_service.calculate_routes(

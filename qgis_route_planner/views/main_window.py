@@ -16,7 +16,7 @@ from qgis.core import (
     QgsPalLayerSettings, QgsVectorLayerSimpleLabeling
 )
 from qgis.gui import (
-    QgsMapTool, QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
+    QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
 )
 
 from ..data.route import RoutePoint, PointType
@@ -39,6 +39,8 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         self.__restriction_markers: dict[int, QgsVertexMarker] = {}
         self.__restriction_band = None
+
+        self.__restr_mode: bool = False
 
         self.setupUi()
 
@@ -136,6 +138,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         from ..views.widgets import SelectPointMapTool
         self.__select_route_point_tool = SelectPointMapTool(self.mapView)
+        self.__select_restriction_point_tool = SelectPointMapTool(self.mapView)
 
     def __connect(self):
         self.__model.points_changed.connect(self.__on_points_changed)
@@ -155,6 +158,10 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__controller.restriction_point_added.connect(self.__add_restriction_point_marker)
         self.__controller.restriction_band_added.connect(self.__display_restriction_band)
         self.__controller.restriction_band_cleared.connect(self.__clear_restriction_band)
+
+        self.__controller.select_point_on_map_requested.connect(
+            lambda: self.mapView.setMapTool(self.__select_restriction_point_tool)
+        )
 
         self.__connect_ui_to_controller()
 
@@ -181,6 +188,8 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         )
 
         self.__select_route_point_tool.pointClicked.connect(self.__controller.on_map_point_selected)
+        self.__select_restriction_point_tool.pointClicked.connect(self.__controller.on_map_point_selected)
+
         self.clear_list_button.clicked.connect(self.__controller.on_clear_everything)
         self.route_list_widget.route_selected.connect(self.__controller.on_route_selected)
         self.route_list_widget.route_save_requested.connect(self.__controller.on_save_route)
@@ -243,24 +252,40 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
     @pyqtSlot(object, int)
     def __show_context_menu_for_point(self, point: QgsPointXY, node_id: int):
         """Показать контекстное меню точки"""
-        points = self.__model.points
-        has_start = any(p.point_type == PointType.START for p in points)
-        has_end = any(p.point_type == PointType.END for p in points)
-
         menu = QMenu(self.mapView)
-        actions = [
-            ("Установить как начальную точку", PointType.START, not has_start),
-            ("Установить как промежуточную точку", PointType.WAYPOINT, has_start),
-            ("Установить как конечную точку", PointType.END, has_start and not has_end),
-        ]
-        for title, point_type, enabled in actions:
-            action = QAction(title, menu)
+
+        if self.__restr_mode:
+            action = QAction("Установить ограничение", menu)
             action.triggered.connect(
-                lambda checked=False, pt=point_type, cp=point, nid=node_id:
-                    self.__controller.on_add_route_point(cp, pt, nid)
+                lambda p=point, nid=node_id:
+                self.__controller.on_add_restriction_point(p, nid)
             )
-            action.setEnabled(enabled)
             menu.addAction(action)
+
+            action = QAction("Отмена", menu)
+            action.triggered.connect(
+                self.__cancel_restriction_selection
+            )
+            menu.addAction(action)
+
+        else:
+            points = self.__model.points
+            has_start = any(p.point_type == PointType.START for p in points)
+            has_end = any(p.point_type == PointType.END for p in points)
+
+            actions = [
+                ("Установить как начальную точку", PointType.START, not has_start),
+                ("Установить как промежуточную точку", PointType.WAYPOINT, has_start),
+                ("Установить как конечную точку", PointType.END, has_start and not has_end),
+            ]
+            for title, point_type, enabled in actions:
+                action = QAction(title, menu)
+                action.triggered.connect(
+                    lambda checked=False, pt=point_type, p=point, nid=node_id:
+                        self.__controller.on_add_route_point(p, pt, nid)
+                )
+                action.setEnabled(enabled)
+                menu.addAction(action)
 
         menu.exec_(QCursor.pos())
 
@@ -386,7 +411,13 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     def __activate_restriction_mode(self):
         """Активировать режим выбора точек для ограничений"""
+        self.__restr_mode = True
         self.__controller.open_restriction_dialog()
+
+    def __cancel_restriction_selection(self):
+        self.__restr_mode = False
+        self.mapView.setMapTool(None)
+        self.__controller.cancel_add_restriction_point()
 
     def __on_restriction_point_clicked(self, point: QgsPointXY):
         """Обработчик клика для выбора точки ограничения"""

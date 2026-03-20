@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 from ...utils import FormMode
-from ..restrictions.restriction_record import RestrictionRecord
+from ..route.restriction_record import RestrictionRecord
 from enum import Enum
 
 class RestrictionType(Enum):

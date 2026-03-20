@@ -3,13 +3,13 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..services import RestrictionService
-    from ..data.models import RestrictionModel
+    from ..data.route import RestrictionModel
 
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 from qgis.core import QgsPointXY
 
 from ..data.models import RestrictionType
-from ..data.restrictions import RestrictionRecord
+from ..data.route import RestrictionRecord
 from ..utils import FormMode
 
 
@@ -210,7 +210,7 @@ class RestrictionDialogController(QObject):
         self.point_selected.emit(point, node_id)
 
     def __load_restriction_to_form(self, restriction_id: int):
-        """Загрузить данные ограничения в модель (для отображения в форме)"""
+        """Загрузить данные ограничения в модель"""
         try:
             r_dict = self.__service.get_restriction_by_id(restriction_id)
             if r_dict:
