@@ -6,14 +6,14 @@ if TYPE_CHECKING:
     from ..controllers import InitDialogsController
 
 from qgis.PyQt import QtWidgets
-from qgis.PyQt.QtGui import QRegExpValidator, QCursor
+from qgis.PyQt.QtGui import QRegExpValidator
 from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QMetaObject, QCoreApplication, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
 from ..data.models import DbConfigModel
 
 class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
-    """Диалоговое окно подключения к БД"""
+    """ Диалоговое окно подключения к БД """
 
     def __init__(
             self,

@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from ...utils import ColumnRole, GeometryType
+from ...utils import ColumnRole, GeometryType, LayerRole
 from .layer_config_model import Layer
 
 from dataclasses import dataclass
@@ -78,7 +78,7 @@ class ColumnsConfigModel(QObject):
         errors = []
 
         for layer in self.__layers:
-            if layer.geom_type is not GeometryType.LINESTRING:
+            if layer.role is not LayerRole.ROADS:
                 continue
 
             mapping = self.__mappings.get(layer.name, {})

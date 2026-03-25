@@ -15,7 +15,7 @@ from ..data.vehicle import VehicleType
 
 
 class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
-    """Окно настроек плагина"""
+    """ Окно настроек плагина """
 
     def __init__(
             self,
@@ -28,10 +28,10 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__controller: SettingsDialogController = controller
         self.__model: SettingsModel = model
 
-        self.setupUi()
+        self.__setupUi()
 
     def __connect(self):
-        """Подключение сигналов от контроллера и виджетов"""
+        """ Подключение сигналов от контроллера и виджетов """
         # Сигналы от контроллера к view
         self.__controller.open_page_requested.connect(self.__open_dialog)
         self.__controller.show_error.connect(self._show_error)
@@ -46,348 +46,425 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__model.current_profile_id_changed.connect(self.__on_current_profile_changed)
         self.__model.editing_mode_changed.connect(self.__on_editing_mode_changed)
         self.__model.current_profile_data_changed.connect(self.__on_current_profile_data_changed)
+        self.__model.weather_settings_changed.connect(self.__on_weather_settings_changed)
 
         # Сигналы от view к контроллеру
-        self.editDbConButton.clicked.connect(self.__on_change_db_clicked)
+        self.__editDbConButton.clicked.connect(self.__on_change_db_clicked)
 
-        self.createProfileButton.clicked.connect(self.__on_create_profile_clicked)
-        self.editProfileButton.clicked.connect(self.__controller.start_profile_edit)
-        self.saveProfileButton.clicked.connect(self.__on_save_profile_clicked)
-        self.deleteProfileButton.clicked.connect(self.__controller.request_delete_profile)
-        self.cancelProfileEditButton.clicked.connect(self.__controller.cancel_profile_edit)
-        self.setActiveProfileButton.clicked.connect(self.__controller.set_active_profile)
-        self.profilesListWidget.itemSelectionChanged.connect(self.__on_profile_selection_changed)
-        self.profilesListWidget.itemDoubleClicked.connect(self.__on_profile_double_clicked)
+        self.__createProfileButton.clicked.connect(self.__on_create_profile_clicked)
+        self.__editProfileButton.clicked.connect(self.__controller.start_profile_edit)
+        self.__saveProfileButton.clicked.connect(self.__on_save_profile_clicked)
+        self.__deleteProfileButton.clicked.connect(self.__controller.request_delete_profile)
+        self.__cancelProfileEditButton.clicked.connect(self.__controller.cancel_profile_edit)
+        self.__setActiveProfileButton.clicked.connect(self.__controller.set_active_profile)
+        self.__profilesListWidget.itemSelectionChanged.connect(self.__on_profile_selection_changed)
+        self.__profilesListWidget.itemDoubleClicked.connect(self.__on_profile_double_clicked)
 
-        self.rebuildGraphButton.clicked.connect(self.__on_rebuild_graph_clicked)
+        self.__rebuildGraphButton.clicked.connect(self.__on_rebuild_graph_clicked)
+        self.__checkServiceConButton.clicked.connect(self.__on_check_weather_clicked)
+        self.__saveWeatherButton.clicked.connect(self.__on_save_weather_clicked)
 
-    def setupUi(self):
+    def __setupUi(self):
         self.setObjectName("SettingsDialog")
         self.resize(600, 400)
 
-        self.verticalLayout = QtWidgets.QVBoxLayout(self)
-        self.verticalLayout.setObjectName("verticalLayout")
+        self.__verticalLayout = QtWidgets.QVBoxLayout(self)
+        self.__verticalLayout.setObjectName("verticalLayout")
 
-        self.gridLayout = QtWidgets.QGridLayout()
-        self.gridLayout.setObjectName("gridLayout")
+        self.__gridLayout = QtWidgets.QGridLayout()
+        self.__gridLayout.setObjectName("gridLayout")
 
-        self.tabWidget = QtWidgets.QTabWidget(self)
-        self.tabWidget.setObjectName("tabWidget")
+        self.__tabWidget = QtWidgets.QTabWidget(self)
+        self.__tabWidget.setObjectName("tabWidget")
 
-        self.tabDb = QtWidgets.QWidget()
-        self.tabDb.setObjectName("tabDb")
+        self.__tabDb = QtWidgets.QWidget()
+        self.__tabDb.setObjectName("tabDb")
 
-        self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.tabDb)
-        self.verticalLayout_5.setObjectName("verticalLayout_5")
+        self.__verticalLayout_5 = QtWidgets.QVBoxLayout(self.__tabDb)
+        self.__verticalLayout_5.setObjectName("verticalLayout_5")
 
-        self.formLayout_2 = QtWidgets.QFormLayout()
-        self.formLayout_2.setObjectName("formLayout_2")
+        self.__formLayout_2 = QtWidgets.QFormLayout()
+        self.__formLayout_2.setObjectName("formLayout_2")
 
-        self.label_7 = QtWidgets.QLabel(self.tabDb)
-        self.label_7.setObjectName("label_7")
-        self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_7)
+        self.__label_7 = QtWidgets.QLabel(self.__tabDb)
+        self.__label_7.setObjectName("label_7")
+        self.__formLayout_2.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_7)
 
-        self.label_8 = QtWidgets.QLabel(self.tabDb)
-        self.label_8.setObjectName("label_8")
-        self.formLayout_2.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_8)
+        self.__label_8 = QtWidgets.QLabel(self.__tabDb)
+        self.__label_8.setObjectName("label_8")
+        self.__formLayout_2.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_8)
 
-        self.label_9 = QtWidgets.QLabel(self.tabDb)
-        self.label_9.setObjectName("label_9")
-        self.formLayout_2.setWidget(5, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_9)
+        self.__label_9 = QtWidgets.QLabel(self.__tabDb)
+        self.__label_9.setObjectName("label_9")
+        self.__formLayout_2.setWidget(5, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_9)
 
-        self.label_10 = QtWidgets.QLabel(self.tabDb)
-        self.label_10.setObjectName("label_10")
-        self.formLayout_2.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_10)
+        self.__label_10 = QtWidgets.QLabel(self.__tabDb)
+        self.__label_10.setObjectName("label_10")
+        self.__formLayout_2.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_10)
 
-        self.label_11 = QtWidgets.QLabel(self.tabDb)
-        self.label_11.setObjectName("label_11")
-        self.formLayout_2.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_11)
+        self.__label_11 = QtWidgets.QLabel(self.__tabDb)
+        self.__label_11.setObjectName("label_11")
+        self.__formLayout_2.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_11)
 
-        self.horizontalLayout_4 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_4.setContentsMargins(-1, 0, -1, -1)
-        self.horizontalLayout_4.setObjectName("horizontalLayout_4")
+        self.__horizontalLayout_4 = QtWidgets.QHBoxLayout()
+        self.__horizontalLayout_4.setContentsMargins(-1, 0, -1, -1)
+        self.__horizontalLayout_4.setObjectName("horizontalLayout_4")
 
-        self.editDbConButton = QtWidgets.QPushButton(self.tabDb)
-        self.editDbConButton.setObjectName("editDbConButton")
-        self.horizontalLayout_4.addWidget(self.editDbConButton)
-        self.formLayout_2.setLayout(6, QtWidgets.QFormLayout.ItemRole.FieldRole, self.horizontalLayout_4)
+        self.__editDbConButton = QtWidgets.QPushButton(self.__tabDb)
+        self.__editDbConButton.setObjectName("editDbConButton")
+        self.__horizontalLayout_4.addWidget(self.__editDbConButton)
+        self.__formLayout_2.setLayout(6, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__horizontalLayout_4)
 
-        self.dbHostnameEdit = QtWidgets.QLineEdit(self.tabDb)
-        self.dbHostnameEdit.setEnabled(False)
-        self.dbHostnameEdit.setMaxLength(200)
-        self.dbHostnameEdit.setObjectName("dbHostnameEdit")
-        self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbHostnameEdit)
+        self.__dbHostnameEdit = QtWidgets.QLineEdit(self.__tabDb)
+        self.__dbHostnameEdit.setEnabled(False)
+        self.__dbHostnameEdit.setMaxLength(200)
+        self.__dbHostnameEdit.setObjectName("dbHostnameEdit")
+        self.__formLayout_2.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__dbHostnameEdit)
 
-        self.dbPortEdit = QtWidgets.QLineEdit(self.tabDb)
-        self.dbPortEdit.setEnabled(False)
-        self.dbPortEdit.setMaxLength(6)
-        self.dbPortEdit.setObjectName("dbPortEdit")
-        self.formLayout_2.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbPortEdit)
+        self.__dbPortEdit = QtWidgets.QLineEdit(self.__tabDb)
+        self.__dbPortEdit.setEnabled(False)
+        self.__dbPortEdit.setMaxLength(6)
+        self.__dbPortEdit.setObjectName("dbPortEdit")
+        self.__formLayout_2.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__dbPortEdit)
 
-        self.dbUsernameEdit = QtWidgets.QLineEdit(self.tabDb)
-        self.dbUsernameEdit.setEnabled(False)
-        self.dbUsernameEdit.setMaxLength(50)
-        self.dbUsernameEdit.setObjectName("dbUsernameEdit")
-        self.formLayout_2.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbUsernameEdit)
+        self.__dbUsernameEdit = QtWidgets.QLineEdit(self.__tabDb)
+        self.__dbUsernameEdit.setEnabled(False)
+        self.__dbUsernameEdit.setMaxLength(50)
+        self.__dbUsernameEdit.setObjectName("dbUsernameEdit")
+        self.__formLayout_2.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__dbUsernameEdit)
 
-        self.dbPasswordEdit = QtWidgets.QLineEdit(self.tabDb)
-        self.dbPasswordEdit.setEnabled(False)
-        self.dbPasswordEdit.setMaxLength(50)
-        self.dbPasswordEdit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
-        self.dbPasswordEdit.setObjectName("dbPasswordEdit")
-        self.formLayout_2.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbPasswordEdit)
+        self.__dbPasswordEdit = QtWidgets.QLineEdit(self.__tabDb)
+        self.__dbPasswordEdit.setEnabled(False)
+        self.__dbPasswordEdit.setMaxLength(50)
+        self.__dbPasswordEdit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+        self.__dbPasswordEdit.setObjectName("dbPasswordEdit")
+        self.__formLayout_2.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__dbPasswordEdit)
 
-        self.dbSchemaEdit = QtWidgets.QLineEdit(self.tabDb)
-        self.dbSchemaEdit.setEnabled(False)
-        self.dbSchemaEdit.setObjectName("dbSchemaEdit")
-        self.formLayout_2.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbSchemaEdit)
+        self.__dbSchemaEdit = QtWidgets.QLineEdit(self.__tabDb)
+        self.__dbSchemaEdit.setEnabled(False)
+        self.__dbSchemaEdit.setObjectName("dbSchemaEdit")
+        self.__formLayout_2.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__dbSchemaEdit)
 
-        self.label_13 = QtWidgets.QLabel(self.tabDb)
-        self.label_13.setObjectName("label_13")
-        self.formLayout_2.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_13)
+        self.__label_13 = QtWidgets.QLabel(self.__tabDb)
+        self.__label_13.setObjectName("label_13")
+        self.__formLayout_2.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_13)
 
-        self.dbDatabaseNameEdit = QtWidgets.QLineEdit(self.tabDb)
-        self.dbDatabaseNameEdit.setEnabled(False)
-        self.dbDatabaseNameEdit.setMaxLength(100)
-        self.dbDatabaseNameEdit.setObjectName("dbDatabaseNameEdit")
-        self.formLayout_2.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.dbDatabaseNameEdit)
-        self.verticalLayout_5.addLayout(self.formLayout_2)
+        self.__dbDatabaseNameEdit = QtWidgets.QLineEdit(self.__tabDb)
+        self.__dbDatabaseNameEdit.setEnabled(False)
+        self.__dbDatabaseNameEdit.setMaxLength(100)
+        self.__dbDatabaseNameEdit.setObjectName("dbDatabaseNameEdit")
+        self.__formLayout_2.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__dbDatabaseNameEdit)
+        self.__verticalLayout_5.addLayout(self.__formLayout_2)
 
         spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.verticalLayout_5.addItem(spacerItem)
+        self.__verticalLayout_5.addItem(spacerItem)
 
-        self.tabWidget.addTab(self.tabDb, "")
+        self.__tabWidget.addTab(self.__tabDb, "")
 
-        self.tabProfiles = QtWidgets.QWidget()
-        self.tabProfiles.setObjectName("tabProfiles")
+        self.__tabProfiles = QtWidgets.QWidget()
+        self.__tabProfiles.setObjectName("tabProfiles")
 
-        self.horizontalLayout = QtWidgets.QHBoxLayout(self.tabProfiles)
-        self.horizontalLayout.setObjectName("horizontalLayout")
+        self.__horizontalLayout = QtWidgets.QHBoxLayout(self.__tabProfiles)
+        self.__horizontalLayout.setObjectName("horizontalLayout")
 
-        self.verticalLayout_4 = QtWidgets.QVBoxLayout()
-        self.verticalLayout_4.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetDefaultConstraint)
-        self.verticalLayout_4.setContentsMargins(-1, -1, 0, -1)
-        self.verticalLayout_4.setObjectName("verticalLayout_4")
+        self.__verticalLayout_4 = QtWidgets.QVBoxLayout()
+        self.__verticalLayout_4.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetDefaultConstraint)
+        self.__verticalLayout_4.setContentsMargins(-1, -1, 0, -1)
+        self.__verticalLayout_4.setObjectName("verticalLayout_4")
 
-        self.profilesListWidget = QtWidgets.QListWidget(self.tabProfiles)
-        self.profilesListWidget.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        self.profilesListWidget.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.profilesListWidget.setSelectionRectVisible(True)
-        self.profilesListWidget.setItemAlignment(QtCore.Qt.AlignmentFlag.AlignLeading)
-        self.profilesListWidget.setObjectName("profilesListWidget")
-        self.verticalLayout_4.addWidget(self.profilesListWidget)
+        self.__profilesListWidget = QtWidgets.QListWidget(self.__tabProfiles)
+        self.__profilesListWidget.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.__profilesListWidget.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.__profilesListWidget.setSelectionRectVisible(True)
+        self.__profilesListWidget.setItemAlignment(QtCore.Qt.AlignmentFlag.AlignLeading)
+        self.__profilesListWidget.setObjectName("profilesListWidget")
+        self.__verticalLayout_4.addWidget(self.__profilesListWidget)
 
-        self.gridLayout_3 = QtWidgets.QGridLayout()
-        self.gridLayout_3.setContentsMargins(-1, -1, 0, 0)
-        self.gridLayout_3.setObjectName("gridLayout_3")
+        self.__gridLayout_3 = QtWidgets.QGridLayout()
+        self.__gridLayout_3.setContentsMargins(-1, -1, 0, 0)
+        self.__gridLayout_3.setObjectName("gridLayout_3")
 
-        self.deleteProfileButton = QtWidgets.QPushButton(self.tabProfiles)
-        self.deleteProfileButton.setEnabled(False)
-        self.deleteProfileButton.setObjectName("deleteProfileButton")
-        self.gridLayout_3.addWidget(self.deleteProfileButton, 1, 0, 1, 1)
+        self.__deleteProfileButton = QtWidgets.QPushButton(self.__tabProfiles)
+        self.__deleteProfileButton.setEnabled(False)
+        self.__deleteProfileButton.setObjectName("deleteProfileButton")
+        self.__gridLayout_3.addWidget(self.__deleteProfileButton, 1, 0, 1, 1)
 
-        self.createProfileButton = QtWidgets.QPushButton(self.tabProfiles)
-        self.createProfileButton.setObjectName("createProfileButton")
-        self.gridLayout_3.addWidget(self.createProfileButton, 0, 0, 1, 1)
+        self.__createProfileButton = QtWidgets.QPushButton(self.__tabProfiles)
+        self.__createProfileButton.setObjectName("createProfileButton")
+        self.__gridLayout_3.addWidget(self.__createProfileButton, 0, 0, 1, 1)
 
-        self.setActiveProfileButton = QtWidgets.QPushButton(self.tabProfiles)
-        self.setActiveProfileButton.setEnabled(False)
-        self.setActiveProfileButton.setObjectName("setActiveProfileButton")
-        self.gridLayout_3.addWidget(self.setActiveProfileButton, 3, 0, 1, 1)
+        self.__setActiveProfileButton = QtWidgets.QPushButton(self.__tabProfiles)
+        self.__setActiveProfileButton.setEnabled(False)
+        self.__setActiveProfileButton.setObjectName("setActiveProfileButton")
+        self.__gridLayout_3.addWidget(self.__setActiveProfileButton, 3, 0, 1, 1)
 
-        self.editProfileButton = QtWidgets.QPushButton(self.tabProfiles)
-        self.editProfileButton.setEnabled(False)
-        self.editProfileButton.setObjectName("editProfileButton")
-        self.gridLayout_3.addWidget(self.editProfileButton, 2, 0, 1, 1)
-        self.verticalLayout_4.addLayout(self.gridLayout_3)
-        self.horizontalLayout.addLayout(self.verticalLayout_4)
+        self.__editProfileButton = QtWidgets.QPushButton(self.__tabProfiles)
+        self.__editProfileButton.setEnabled(False)
+        self.__editProfileButton.setObjectName("editProfileButton")
+        self.__gridLayout_3.addWidget(self.__editProfileButton, 2, 0, 1, 1)
+        self.__verticalLayout_4.addLayout(self.__gridLayout_3)
+        self.__horizontalLayout.addLayout(self.__verticalLayout_4)
 
-        self.profilesFormLayout = QtWidgets.QGroupBox(self.tabProfiles)
-        self.profilesFormLayout.setObjectName("profilesFormLayout")
+        self.__profilesFormLayout = QtWidgets.QGroupBox(self.__tabProfiles)
+        self.__profilesFormLayout.setObjectName("profilesFormLayout")
 
-        self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.profilesFormLayout)
-        self.verticalLayout_2.setContentsMargins(-1, 9, -1, 0)
-        self.verticalLayout_2.setObjectName("verticalLayout_2")
+        self.__verticalLayout_2 = QtWidgets.QVBoxLayout(self.__profilesFormLayout)
+        self.__verticalLayout_2.setContentsMargins(-1, 9, -1, 0)
+        self.__verticalLayout_2.setObjectName("verticalLayout_2")
 
-        self.formLayout = QtWidgets.QFormLayout()
-        self.formLayout.setObjectName("formLayout")
+        self.__formLayout = QtWidgets.QFormLayout()
+        self.__formLayout.setObjectName("formLayout")
 
-        self.label = QtWidgets.QLabel(self.profilesFormLayout)
-        self.label.setObjectName("label")
-        self.formLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label)
+        self.__label = QtWidgets.QLabel(self.__profilesFormLayout)
+        self.__label.setObjectName("label")
+        self.__formLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label)
 
-        self.label_2 = QtWidgets.QLabel(self.profilesFormLayout)
-        self.label_2.setObjectName("label_2")
-        self.formLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_2)
+        self.__label_2 = QtWidgets.QLabel(self.__profilesFormLayout)
+        self.__label_2.setObjectName("label_2")
+        self.__formLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_2)
 
-        self.label_3 = QtWidgets.QLabel(self.profilesFormLayout)
-        self.label_3.setObjectName("label_3")
-        self.formLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_3)
+        self.__label_3 = QtWidgets.QLabel(self.__profilesFormLayout)
+        self.__label_3.setObjectName("label_3")
+        self.__formLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_3)
 
-        self.label_4 = QtWidgets.QLabel(self.profilesFormLayout)
-        self.label_4.setObjectName("label_4")
-        self.formLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_4)
+        self.__label_4 = QtWidgets.QLabel(self.__profilesFormLayout)
+        self.__label_4.setObjectName("label_4")
+        self.__formLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_4)
 
-        self.label_5 = QtWidgets.QLabel(self.profilesFormLayout)
-        self.label_5.setObjectName("label_5")
-        self.formLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_5)
+        self.__label_5 = QtWidgets.QLabel(self.__profilesFormLayout)
+        self.__label_5.setObjectName("label_5")
+        self.__formLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_5)
 
-        self.profileNameEdit = QtWidgets.QLineEdit(self.profilesFormLayout)
-        self.profileNameEdit.setEnabled(False)
-        self.profileNameEdit.setMaxLength(50)
-        self.profileNameEdit.setObjectName("profileNameEdit")
-        self.formLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileNameEdit)
+        self.__profileNameEdit = QtWidgets.QLineEdit(self.__profilesFormLayout)
+        self.__profileNameEdit.setEnabled(False)
+        self.__profileNameEdit.setMaxLength(50)
+        self.__profileNameEdit.setObjectName("profileNameEdit")
+        self.__formLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileNameEdit)
 
-        self.profileHeightSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
-        self.profileHeightSpinBox.setEnabled(False)
-        self.profileHeightSpinBox.setMaximum(999999.0)
-        self.profileHeightSpinBox.setStepType(QtWidgets.QAbstractSpinBox.StepType.AdaptiveDecimalStepType)
-        self.profileHeightSpinBox.setObjectName("profileHeightSpinBox")
-        self.formLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileHeightSpinBox)
+        self.__profileHeightSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
+        self.__profileHeightSpinBox.setEnabled(False)
+        self.__profileHeightSpinBox.setMaximum(999999.0)
+        self.__profileHeightSpinBox.setStepType(QtWidgets.QAbstractSpinBox.StepType.AdaptiveDecimalStepType)
+        self.__profileHeightSpinBox.setObjectName("profileHeightSpinBox")
+        self.__formLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileHeightSpinBox)
 
-        self.profileWidthSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
-        self.profileWidthSpinBox.setEnabled(False)
-        self.profileWidthSpinBox.setMaximum(999999.0)
-        self.profileWidthSpinBox.setObjectName("profileWidthSpinBox")
-        self.formLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileWidthSpinBox)
+        self.__profileWidthSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
+        self.__profileWidthSpinBox.setEnabled(False)
+        self.__profileWidthSpinBox.setMaximum(999999.0)
+        self.__profileWidthSpinBox.setObjectName("profileWidthSpinBox")
+        self.__formLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileWidthSpinBox)
 
-        self.profileWeightSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
-        self.profileWeightSpinBox.setEnabled(False)
-        self.profileWeightSpinBox.setMaximum(999999.0)
-        self.profileWeightSpinBox.setObjectName("profileWeightSpinBox")
-        self.formLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileWeightSpinBox)
+        self.__profileWeightSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
+        self.__profileWeightSpinBox.setEnabled(False)
+        self.__profileWeightSpinBox.setMaximum(999999.0)
+        self.__profileWeightSpinBox.setObjectName("profileWeightSpinBox")
+        self.__formLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileWeightSpinBox)
 
-        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.formLayout.setItem(7, QtWidgets.QFormLayout.ItemRole.LabelRole, spacerItem1)
+        __spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.__formLayout.setItem(7, QtWidgets.QFormLayout.ItemRole.LabelRole, __spacerItem1)
 
-        self.vehicleTypeComboBox = QtWidgets.QComboBox(self.profilesFormLayout)
-        self.vehicleTypeComboBox.setEnabled(False)
+        self.__vehicleTypeComboBox = QtWidgets.QComboBox(self.__profilesFormLayout)
+        self.__vehicleTypeComboBox.setEnabled(False)
         for v_type in VehicleType:
-            self.vehicleTypeComboBox.addItem(v_type.value, v_type)
-        self.vehicleTypeComboBox.setObjectName("vehicleTypeComboBox")
-        self.formLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.vehicleTypeComboBox)
+            self.__vehicleTypeComboBox.addItem(v_type.value, v_type)
+        self.__vehicleTypeComboBox.setObjectName("vehicleTypeComboBox")
+        self.__formLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__vehicleTypeComboBox)
 
-        self.label_12 = QtWidgets.QLabel(self.profilesFormLayout)
-        self.label_12.setObjectName("label_12")
-        self.formLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_12)
+        self.__label_12 = QtWidgets.QLabel(self.__profilesFormLayout)
+        self.__label_12.setObjectName("label_12")
+        self.__formLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__label_12)
 
-        self.profileDepthSpinBox = QtWidgets.QDoubleSpinBox(self.profilesFormLayout)
-        self.profileDepthSpinBox.setEnabled(False)
-        self.profileDepthSpinBox.setMaximum(999999.0)
-        self.profileDepthSpinBox.setObjectName("profileDepthSpinBox")
-        self.formLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.profileDepthSpinBox)
-        self.verticalLayout_2.addLayout(self.formLayout)
+        self.__profileDepthSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
+        self.__profileDepthSpinBox.setEnabled(False)
+        self.__profileDepthSpinBox.setMaximum(999999.0)
+        self.__profileDepthSpinBox.setObjectName("profileDepthSpinBox")
+        self.__formLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileDepthSpinBox)
+        self.__verticalLayout_2.addLayout(self.__formLayout)
 
-        self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_2.setObjectName("horizontalLayout_2")
+        self.__horizontalLayout_2 = QtWidgets.QHBoxLayout()
+        self.__horizontalLayout_2.setObjectName("horizontalLayout_2")
 
-        self.saveProfileButton = QtWidgets.QPushButton(self.profilesFormLayout)
-        self.saveProfileButton.setEnabled(False)
-        self.saveProfileButton.setObjectName("saveProfileButton")
-        self.horizontalLayout_2.addWidget(self.saveProfileButton)
+        self.__saveProfileButton = QtWidgets.QPushButton(self.__profilesFormLayout)
+        self.__saveProfileButton.setEnabled(False)
+        self.__saveProfileButton.setObjectName("saveProfileButton")
+        self.__horizontalLayout_2.addWidget(self.__saveProfileButton)
 
-        self.cancelProfileEditButton = QtWidgets.QPushButton(self.profilesFormLayout)
-        self.cancelProfileEditButton.setEnabled(False)
-        self.cancelProfileEditButton.setObjectName("cancelProfileEditButton")
-        self.horizontalLayout_2.addWidget(self.cancelProfileEditButton)
-        self.verticalLayout_2.addLayout(self.horizontalLayout_2)
-        self.horizontalLayout.addWidget(self.profilesFormLayout)
-        self.tabWidget.addTab(self.tabProfiles, "")
+        self.__cancelProfileEditButton = QtWidgets.QPushButton(self.__profilesFormLayout)
+        self.__cancelProfileEditButton.setEnabled(False)
+        self.__cancelProfileEditButton.setObjectName("cancelProfileEditButton")
+        self.__horizontalLayout_2.addWidget(self.__cancelProfileEditButton)
+        self.__verticalLayout_2.addLayout(self.__horizontalLayout_2)
+        self.__horizontalLayout.addWidget(self.__profilesFormLayout)
+        self.__tabWidget.addTab(self.__tabProfiles, "")
 
-        self.tabGraph = QtWidgets.QWidget()
-        self.tabGraph.setObjectName("tabGraph")
+        self.__tabGraph = QtWidgets.QWidget()
+        self.__tabGraph.setObjectName("tabGraph")
 
-        self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.tabGraph)
-        self.verticalLayout_3.setObjectName("verticalLayout_3")
+        self.__verticalLayout_3 = QtWidgets.QVBoxLayout(self.__tabGraph)
+        self.__verticalLayout_3.setObjectName("verticalLayout_3")
 
-        self.rebuildGraphButton = QtWidgets.QPushButton(self.tabGraph)
-        self.rebuildGraphButton.setObjectName("rebuildGraphButton")
-        self.verticalLayout_3.addWidget(self.rebuildGraphButton)
+        self.__rebuildGraphButton = QtWidgets.QPushButton(self.__tabGraph)
+        self.__rebuildGraphButton.setObjectName("rebuildGraphButton")
+        self.__verticalLayout_3.addWidget(self.__rebuildGraphButton)
 
-        spacerItem2 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
-        self.verticalLayout_3.addItem(spacerItem2)
-        self.tabWidget.addTab(self.tabGraph, "")
+        __spacerItem2 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.__verticalLayout_3.addItem(__spacerItem2)
+        self.__tabWidget.addTab(self.__tabGraph, "")
 
-        self.tabRestrictions = QtWidgets.QWidget()
-        self.tabRestrictions.setObjectName("tabRestrictions")
+        self.__tabWeather = QtWidgets.QWidget()
+        self.__tabWeather.setObjectName("tabWeather")
 
-        self.tabWeather = QtWidgets.QWidget()
-        self.tabWeather.setObjectName("tabWeather")
+        self.__tabWeatherLayout = QtWidgets.QFormLayout(self.__tabWeather)
 
-        self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
-        self.verticalLayout.addLayout(self.gridLayout)
+        self.__urlLabel = QtWidgets.QLabel(self.__tabWeather)
+        self.__urlLabel.setObjectName("urlLabel")
+        self.__tabWeatherLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__urlLabel)
 
-        self.retranslateUi()
-        self.tabWidget.setCurrentIndex(0)
+        self.__urlLineEdit = QtWidgets.QLineEdit(self.__tabWeather)
+        self.__urlLineEdit.setObjectName("urlLineEdit")
+        self.__urlLineEdit.setEnabled(False)
+        self.__tabWeatherLayout.setWidget(0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__urlLineEdit)
+
+        self.__keyLabel = QtWidgets.QLabel(self.__tabWeather)
+        self.__keyLabel.setObjectName("keyLabel")
+        self.__tabWeatherLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__keyLabel)
+
+        self.__keyLineEdit = QtWidgets.QLineEdit(self.__tabWeather)
+        self.__keyLineEdit.setObjectName("keyLineEdit")
+        self.__keyLineEdit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+        self.__tabWeatherLayout.setWidget(1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__keyLineEdit)
+
+        self.__fallbackSeasonLabel = QtWidgets.QLabel(self.__tabWeather)
+        self.__fallbackSeasonLabel.setObjectName("fallbackSeasonLabel")
+        self.__tabWeatherLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__fallbackSeasonLabel)
+
+        self.__fallbackSeasonComboBox = QtWidgets.QComboBox(self.__tabWeather)
+        self.__fallbackSeasonComboBox.setObjectName("fallbackSeasonComboBox")
+        self.__fallbackSeasonComboBox.addItem("", "summer")
+        self.__fallbackSeasonComboBox.addItem("", "winter")
+        self.__tabWeatherLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__fallbackSeasonComboBox)
+
+        self.__summerSpeedLabel = QtWidgets.QLabel(self.__tabWeather)
+        self.__summerSpeedLabel.setObjectName("summerSpeedLabel")
+        self.__tabWeatherLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__summerSpeedLabel)
+
+        self.__summerSpeedSpinBox = QtWidgets.QDoubleSpinBox(self.__tabWeather)
+        self.__summerSpeedSpinBox.setObjectName("summerSpeedSpinBox")
+        self.__summerSpeedSpinBox.setRange(1.0, 200.0)
+        self.__summerSpeedSpinBox.setDecimals(1)
+        self.__summerSpeedSpinBox.setSingleStep(5.0)
+        self.__tabWeatherLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__summerSpeedSpinBox)
+
+        self.__winterSpeedLabel = QtWidgets.QLabel(self.__tabWeather)
+        self.__winterSpeedLabel.setObjectName("winterSpeedLabel")
+        self.__tabWeatherLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__winterSpeedLabel)
+
+        self.__winterSpeedSpinBox = QtWidgets.QDoubleSpinBox(self.__tabWeather)
+        self.__winterSpeedSpinBox.setObjectName("winterSpeedSpinBox")
+        self.__winterSpeedSpinBox.setRange(1.0, 200.0)
+        self.__winterSpeedSpinBox.setDecimals(1)
+        self.__winterSpeedSpinBox.setSingleStep(5.0)
+        self.__tabWeatherLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__winterSpeedSpinBox)
+
+        self.__weatherButtonsLayout = QtWidgets.QHBoxLayout()
+        self.__weatherButtonsLayout.setObjectName("weatherButtonsLayout")
+
+        self.__checkServiceConButton = QtWidgets.QPushButton(self.__tabWeather)
+        self.__checkServiceConButton.setObjectName("checkServiceConButton")
+        self.__weatherButtonsLayout.addWidget(self.__checkServiceConButton)
+
+        self.__saveWeatherButton = QtWidgets.QPushButton(self.__tabWeather)
+        self.__saveWeatherButton.setObjectName("saveWeatherButton")
+        self.__weatherButtonsLayout.addWidget(self.__saveWeatherButton)
+
+        self.__tabWeatherLayout.setLayout(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__weatherButtonsLayout)
+        self.__tabWidget.addTab(self.__tabWeather, "")
+
+        self.__gridLayout.addWidget(self.__tabWidget, 0, 0, 1, 1)
+        self.__verticalLayout.addLayout(self.__gridLayout)
+
+        self.__retranslateUi()
+        self.__tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(self)
         self.__connect()
 
-        self.setTabOrder(self.tabWidget, self.dbHostnameEdit)
-        self.setTabOrder(self.dbHostnameEdit, self.dbPortEdit)
-        self.setTabOrder(self.dbPortEdit, self.dbUsernameEdit)
-        self.setTabOrder(self.dbUsernameEdit, self.dbPasswordEdit)
-        self.setTabOrder(self.dbPasswordEdit, self.dbDatabaseNameEdit)
-        self.setTabOrder(self.dbDatabaseNameEdit, self.dbSchemaEdit)
-        self.setTabOrder(self.dbSchemaEdit, self.profilesListWidget)
-        self.setTabOrder(self.profilesListWidget, self.createProfileButton)
-        self.setTabOrder(self.createProfileButton, self.deleteProfileButton)
-        self.setTabOrder(self.deleteProfileButton, self.editProfileButton)
-        self.setTabOrder(self.editProfileButton, self.setActiveProfileButton)
-        self.setTabOrder(self.setActiveProfileButton, self.profileNameEdit)
-        self.setTabOrder(self.profileNameEdit, self.vehicleTypeComboBox)
-        self.setTabOrder(self.vehicleTypeComboBox, self.profileHeightSpinBox)
-        self.setTabOrder(self.profileHeightSpinBox, self.profileWidthSpinBox)
-        self.setTabOrder(self.profileWidthSpinBox, self.profileDepthSpinBox)
-        self.setTabOrder(self.profileDepthSpinBox, self.profileWeightSpinBox)
-        self.setTabOrder(self.profileWeightSpinBox, self.saveProfileButton)
-        self.setTabOrder(self.saveProfileButton, self.cancelProfileEditButton)
+        self.setTabOrder(self.__tabWidget, self.__dbHostnameEdit)
+        self.setTabOrder(self.__dbHostnameEdit, self.__dbPortEdit)
+        self.setTabOrder(self.__dbPortEdit, self.__dbUsernameEdit)
+        self.setTabOrder(self.__dbUsernameEdit, self.__dbPasswordEdit)
+        self.setTabOrder(self.__dbPasswordEdit, self.__dbDatabaseNameEdit)
+        self.setTabOrder(self.__dbDatabaseNameEdit, self.__dbSchemaEdit)
+        self.setTabOrder(self.__dbSchemaEdit, self.__profilesListWidget)
+        self.setTabOrder(self.__profilesListWidget, self.__createProfileButton)
+        self.setTabOrder(self.__createProfileButton, self.__deleteProfileButton)
+        self.setTabOrder(self.__deleteProfileButton, self.__editProfileButton)
+        self.setTabOrder(self.__editProfileButton, self.__setActiveProfileButton)
+        self.setTabOrder(self.__setActiveProfileButton, self.__profileNameEdit)
+        self.setTabOrder(self.__profileNameEdit, self.__vehicleTypeComboBox)
+        self.setTabOrder(self.__vehicleTypeComboBox, self.__profileHeightSpinBox)
+        self.setTabOrder(self.__profileHeightSpinBox, self.__profileWidthSpinBox)
+        self.setTabOrder(self.__profileWidthSpinBox, self.__profileDepthSpinBox)
+        self.setTabOrder(self.__profileDepthSpinBox, self.__profileWeightSpinBox)
+        self.setTabOrder(self.__profileWeightSpinBox, self.__saveProfileButton)
+        self.setTabOrder(self.__saveProfileButton, self.__cancelProfileEditButton)
 
-    def retranslateUi(self):
+    def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
         self.setWindowTitle(_translate("Dialog", "Настройки модуля"))
-        self.label_7.setText(_translate("Dialog", "Хост:"))
-        self.label_8.setText(_translate("Dialog", "Порт:"))
-        self.label_9.setText(_translate("Dialog", "Схема:"))
-        self.label_10.setText(_translate("Dialog", "Пользователь:"))
-        self.label_11.setText(_translate("Dialog", "Пароль:"))
-        self.editDbConButton.setText(_translate("Dialog", "Изменить"))
-        self.dbHostnameEdit.setPlaceholderText(_translate("Dialog", "Например, localhost"))
-        self.dbPortEdit.setPlaceholderText(_translate("Dialog", "Например, 5432"))
-        self.dbUsernameEdit.setPlaceholderText(_translate("Dialog", "Например, postgres"))
-        self.label_13.setText(_translate("Dialog", "База данных:"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabDb), _translate("Dialog", "База данных"))
-        self.deleteProfileButton.setText(_translate("Dialog", "Удалить профиль"))
-        self.createProfileButton.setText(_translate("Dialog", "Новый профиль"))
-        self.setActiveProfileButton.setText(_translate("Dialog", "Выбрать в качестве активного профиля"))
-        self.editProfileButton.setText(_translate("Dialog", "Изменить профиль"))
-        self.profilesFormLayout.setTitle(_translate("Dialog", "Настройки профиля"))
-        self.label.setText(_translate("Dialog", "Название:"))
-        self.label_2.setText(_translate("Dialog", "Тип:"))
-        self.label_3.setText(_translate("Dialog", "Высота:"))
-        self.label_4.setText(_translate("Dialog", "Ширина:"))
-        self.label_5.setText(_translate("Dialog", "Вес:"))
-        self.profileNameEdit.setPlaceholderText(_translate("Dialog", "Профиль 1"))
-        self.profileHeightSpinBox.setSuffix(_translate("Dialog", " м"))
-        self.profileWidthSpinBox.setSuffix(_translate("Dialog", " м"))
-        self.profileWeightSpinBox.setSuffix(_translate("Dialog", " т"))
-        self.label_12.setText(_translate("Dialog", "Длина:"))
-        self.profileDepthSpinBox.setSuffix(_translate("Dialog", " м"))
-        self.saveProfileButton.setText(_translate("Dialog", "Сохранить"))
-        self.cancelProfileEditButton.setText(_translate("Dialog", "Отмена"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabProfiles), _translate("Dialog", "Профили ТС"))
-        self.rebuildGraphButton.setText(_translate("Dialog", "Перестроить граф дорог"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabGraph), _translate("Dialog", "Граф дорог"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabRestrictions), _translate("Dialog", "Ограничения"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabWeather), _translate("Dialog", "Погода"))
+        self.__label_7.setText(_translate("Dialog", "Хост:"))
+        self.__label_8.setText(_translate("Dialog", "Порт:"))
+        self.__label_9.setText(_translate("Dialog", "Схема:"))
+        self.__label_10.setText(_translate("Dialog", "Пользователь:"))
+        self.__label_11.setText(_translate("Dialog", "Пароль:"))
+        self.__editDbConButton.setText(_translate("Dialog", "Изменить"))
+        self.__dbHostnameEdit.setPlaceholderText(_translate("Dialog", "Например, localhost"))
+        self.__dbPortEdit.setPlaceholderText(_translate("Dialog", "Например, 5432"))
+        self.__dbUsernameEdit.setPlaceholderText(_translate("Dialog", "Например, postgres"))
+        self.__label_13.setText(_translate("Dialog", "База данных:"))
+        self.__tabWidget.setTabText(self.__tabWidget.indexOf(self.__tabDb), _translate("Dialog", "База данных"))
+        self.__deleteProfileButton.setText(_translate("Dialog", "Удалить профиль"))
+        self.__createProfileButton.setText(_translate("Dialog", "Новый профиль"))
+        self.__setActiveProfileButton.setText(_translate("Dialog", "Выбрать в качестве активного профиля"))
+        self.__editProfileButton.setText(_translate("Dialog", "Изменить профиль"))
+        self.__profilesFormLayout.setTitle(_translate("Dialog", "Настройки профиля"))
+        self.__label.setText(_translate("Dialog", "Название:"))
+        self.__label_2.setText(_translate("Dialog", "Тип:"))
+        self.__label_3.setText(_translate("Dialog", "Высота:"))
+        self.__label_4.setText(_translate("Dialog", "Ширина:"))
+        self.__label_5.setText(_translate("Dialog", "Вес:"))
+        self.__profileNameEdit.setPlaceholderText(_translate("Dialog", "Профиль 1"))
+        self.__profileHeightSpinBox.setSuffix(_translate("Dialog", " м"))
+        self.__profileWidthSpinBox.setSuffix(_translate("Dialog", " м"))
+        self.__profileWeightSpinBox.setSuffix(_translate("Dialog", " т"))
+        self.__label_12.setText(_translate("Dialog", "Длина:"))
+        self.__profileDepthSpinBox.setSuffix(_translate("Dialog", " м"))
+        self.__saveProfileButton.setText(_translate("Dialog", "Сохранить"))
+        self.__cancelProfileEditButton.setText(_translate("Dialog", "Отмена"))
+        self.__tabWidget.setTabText(self.__tabWidget.indexOf(self.__tabProfiles), _translate("Dialog", "Профили ТС"))
+        self.__rebuildGraphButton.setText(_translate("Dialog", "Перестроить граф дорог"))
+        self.__tabWidget.setTabText(self.__tabWidget.indexOf(self.__tabGraph), _translate("Dialog", "Граф дорог"))
+        self.__urlLabel.setText(_translate("Dialog", "URL сервиса:"))
+        self.__urlLineEdit.setPlaceholderText(_translate("Dialog", "https://api.openweathermap.org/data/2.5/weather"))
+        self.__keyLabel.setText(_translate("Dialog", "API-ключ:"))
+        self.__fallbackSeasonLabel.setText(_translate("Dialog", "Сезон (оффлайн):"))
+        self.__fallbackSeasonComboBox.setItemText(0, _translate("Dialog", "Летний"))
+        self.__fallbackSeasonComboBox.setItemText(1, _translate("Dialog", "Зимний"))
+        self.__summerSpeedLabel.setText(_translate("Dialog", "Средняя скорость летом:"))
+        self.__summerSpeedSpinBox.setSuffix(_translate("Dialog", " км/ч"))
+        self.__winterSpeedLabel.setText(_translate("Dialog", "Средняя скорость зимой:"))
+        self.__winterSpeedSpinBox.setSuffix(_translate("Dialog", " км/ч"))
+        self.__checkServiceConButton.setText(_translate("Dialog", "Проверить подключение"))
+        self.__saveWeatherButton.setText(_translate("Dialog", "Сохранить"))
+        self.__tabWidget.setTabText(self.__tabWidget.indexOf(self.__tabWeather), _translate("Dialog", "Сервис погоды"))
 
     # Слоты для сигналов от контроллера
     def __open_dialog(self, page_index: int):
-        """Открыть диалог на указанной вкладке"""
-        self.tabWidget.setCurrentIndex(page_index)
+        """ Открыть диалог на указанной вкладке """
+        self.__tabWidget.setCurrentIndex(page_index)
         self.show()
 
     def __confirm_delete_profile(self, profile_name: str, is_active: bool):
-        """Показать диалог подтверждения удаления профиля"""
+        """ Показать диалог подтверждения удаления профиля """
         msg = "Вы пытаетесь удалить активный профиль.\n" if is_active else ""
         confirm_delete = self._show_question(
             f"{msg}Вы уверены, что хотите удалить профиль '{profile_name}'?",
@@ -399,120 +476,133 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     # Слоты для сигналов от модели
     @pyqtSlot(object)
     def __on_db_params_changed(self, db):
-        """Обновить отображение параметров БД"""
+        """ Обновить отображение параметров БД """
         if db is None:
             return
-        self.dbHostnameEdit.setText(db.host)
-        self.dbPortEdit.setText(str(db.port))
-        self.dbUsernameEdit.setText(db.username)
-        self.dbPasswordEdit.setText(db.password)
-        self.dbDatabaseNameEdit.setText(db.database)
-        self.dbSchemaEdit.setText(db.schema)
+        self.__dbHostnameEdit.setText(db.host)
+        self.__dbPortEdit.setText(str(db.port))
+        self.__dbUsernameEdit.setText(db.username)
+        self.__dbPasswordEdit.setText(db.password)
+        self.__dbDatabaseNameEdit.setText(db.database)
+        self.__dbSchemaEdit.setText(db.schema)
 
     @pyqtSlot(list)
     def __on_profiles_changed(self, profiles: list[VehicleProfile]):
-        """Обновить список профилей"""
+        """ Обновить список профилей """
         self.__update_profiles_list(profiles, self.__model.active_profile_id)
 
     @pyqtSlot(object)
     def __on_active_profile_changed(self, profile_id: int):
-        """Обновить отображение активного профиля в списке"""
+        """ Обновить отображение активного профиля в списке """
         self.__update_profiles_list(self.__model.profiles, profile_id)
 
     @pyqtSlot(object)
     def __on_current_profile_changed(self, profile_id: int):
-        """Выделить профиль в списке"""
+        """ Выделить профиль в списке """
         self.__select_profile_in_list(profile_id)
 
     @pyqtSlot(FormMode)
     def __on_editing_mode_changed(self, mode: FormMode):
-        """Обновить состояние формы редактирования"""
+        """ Обновить состояние формы редактирования """
         is_editing = mode == FormMode.EDIT or mode == FormMode.CREATE
-        self.profileNameEdit.setEnabled(is_editing)
-        self.vehicleTypeComboBox.setEnabled(is_editing)
-        self.profileHeightSpinBox.setEnabled(is_editing)
-        self.profileWidthSpinBox.setEnabled(is_editing)
-        self.profileDepthSpinBox.setEnabled(is_editing)
-        self.profileWeightSpinBox.setEnabled(is_editing)
-        self.saveProfileButton.setEnabled(is_editing)
-        self.cancelProfileEditButton.setEnabled(is_editing)
+        self.__profileNameEdit.setEnabled(is_editing)
+        self.__vehicleTypeComboBox.setEnabled(is_editing)
+        self.__profileHeightSpinBox.setEnabled(is_editing)
+        self.__profileWidthSpinBox.setEnabled(is_editing)
+        self.__profileDepthSpinBox.setEnabled(is_editing)
+        self.__profileWeightSpinBox.setEnabled(is_editing)
+        self.__saveProfileButton.setEnabled(is_editing)
+        self.__cancelProfileEditButton.setEnabled(is_editing)
 
         # Кнопки управления списком
         has_selection = self.__model.current_profile_id is not None
-        self.editProfileButton.setEnabled(has_selection and not is_editing)
-        self.deleteProfileButton.setEnabled(has_selection and not is_editing)
-        self.setActiveProfileButton.setEnabled(has_selection and not is_editing)
-        self.createProfileButton.setEnabled(not is_editing)
-        self.profilesListWidget.setEnabled(not is_editing)
+        self.__editProfileButton.setEnabled(has_selection and not is_editing)
+        self.__deleteProfileButton.setEnabled(has_selection and not is_editing)
+        self.__setActiveProfileButton.setEnabled(has_selection and not is_editing)
+        self.__createProfileButton.setEnabled(not is_editing)
+        self.__profilesListWidget.setEnabled(not is_editing)
 
     @pyqtSlot(object)
     def __on_current_profile_data_changed(self, profile: VehicleProfile):
-        """Обновить форму редактирования данными профиля"""
+        """ Обновить форму редактирования данными профиля """
         if profile is None:
             self.__clear_profile_form()
         else:
             self.__set_profile_form(profile)
 
+    @pyqtSlot(dict)
+    def __on_weather_settings_changed(self, settings: dict):
+        """ Обновить форму погодных настроек """
+        self.__urlLineEdit.setText(settings.get("api_url", ""))
+        self.__keyLineEdit.setText(settings.get("api_key", ""))
+
+        season = settings.get("fallback_season", "summer")
+        season_index = self.__fallbackSeasonComboBox.findData(season)
+        self.__fallbackSeasonComboBox.setCurrentIndex(season_index if season_index >= 0 else 0)
+
+        self.__summerSpeedSpinBox.setValue(float(settings.get("summer_avg_speed_kmh", 60.0)))
+        self.__winterSpeedSpinBox.setValue(float(settings.get("winter_avg_speed_kmh", 45.0)))
+
     # Вспомогательные методы
     def __update_profiles_list(self, profiles_list: list[VehicleProfile], active_id: int | None):
-        """Обновить список профилей в UI"""
+        """ Обновить список профилей в UI"""
         current_profile_id = self.__model.current_profile_id
-        self.profilesListWidget.blockSignals(True)
-        self.profilesListWidget.clear()
+        self.__profilesListWidget.blockSignals(True)
+        self.__profilesListWidget.clear()
 
         for profile in profiles_list:
             display_name = f"✓ {profile.name}" if profile.id == active_id else profile.name
             item = QtWidgets.QListWidgetItem(display_name)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, profile.id)
-            self.profilesListWidget.addItem(item)
+            self.__profilesListWidget.addItem(item)
             if profile.id == current_profile_id:
-                self.profilesListWidget.setCurrentItem(item)
+                self.__profilesListWidget.setCurrentItem(item)
 
-        self.profilesListWidget.blockSignals(False)
+        self.__profilesListWidget.blockSignals(False)
 
     def __select_profile_in_list(self, profile_id: int | None):
-        """Выделить профиль в списке"""
+        """ Выделить профиль в списке """
         if profile_id is None:
-            self.profilesListWidget.clearSelection()
+            self.__profilesListWidget.clearSelection()
             return
 
-        for i in range(self.profilesListWidget.count()):
-            item = self.profilesListWidget.item(i)
+        for i in range(self.__profilesListWidget.count()):
+            item = self.__profilesListWidget.item(i)
             if item.data(QtCore.Qt.ItemDataRole.UserRole) == profile_id:
-                self.profilesListWidget.setCurrentItem(item)
+                self.__profilesListWidget.setCurrentItem(item)
                 break
 
     def __set_profile_form(self, profile: VehicleProfile):
-        """Заполнить форму данными профиля"""
-        self.profileNameEdit.setText(profile.name)
+        """ Заполнить форму данными профиля """
+        self.__profileNameEdit.setText(profile.name)
 
-        index = self.vehicleTypeComboBox.findData(profile.type)
+        index = self.__vehicleTypeComboBox.findData(profile.type)
         if index < 0 and isinstance(profile.type, str):
             try:
                 from ..data.vehicle import VehicleType
-                index = self.vehicleTypeComboBox.findData(VehicleType[profile.type])
+                index = self.__vehicleTypeComboBox.findData(VehicleType[profile.type])
             except KeyError:
                 index = -1
         if index >= 0:
-            self.vehicleTypeComboBox.setCurrentIndex(index)
+            self.__vehicleTypeComboBox.setCurrentIndex(index)
 
-        self.profileHeightSpinBox.setValue(profile.height_m)
-        self.profileWidthSpinBox.setValue(profile.width_m)
-        self.profileWeightSpinBox.setValue(profile.weight_t)
-        self.profileDepthSpinBox.setValue(profile.depth_m)
+        self.__profileHeightSpinBox.setValue(profile.height_m)
+        self.__profileWidthSpinBox.setValue(profile.width_m)
+        self.__profileWeightSpinBox.setValue(profile.weight_t)
+        self.__profileDepthSpinBox.setValue(profile.depth_m)
 
     def __clear_profile_form(self):
-        """Очистить форму профиля"""
-        self.profileNameEdit.clear()
-        self.vehicleTypeComboBox.setCurrentIndex(0)
-        self.profileHeightSpinBox.setValue(0)
-        self.profileWidthSpinBox.setValue(0)
-        self.profileWeightSpinBox.setValue(0)
-        self.profileDepthSpinBox.setValue(0)
+        """ Очистить форму профиля """
+        self.__profileNameEdit.clear()
+        self.__vehicleTypeComboBox.setCurrentIndex(0)
+        self.__profileHeightSpinBox.setValue(0)
+        self.__profileWidthSpinBox.setValue(0)
+        self.__profileWeightSpinBox.setValue(0)
+        self.__profileDepthSpinBox.setValue(0)
 
     # Слоты для событий от виджетов
     def __on_change_db_clicked(self):
-        """Обработчик нажатия на кнопку изменения БД"""
+        """ Обработчик нажатия на кнопку изменения БД """
         confirm_change = self._show_question(
             "Вы уверены, что хотите изменить настройки подключения к БД?",
         )
@@ -521,51 +611,68 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
             self.__controller.change_db_connection()
 
     def __on_rebuild_graph_clicked(self):
-        """Обработчик нажатия на кнопку перестроения графа"""
+        """ Обработчик нажатия на кнопку перестроения графа """
         confirm_rebuild = self._show_question(
             "Вы уверены, что хотите перестроить граф?"
         )
         if confirm_rebuild:
             self.__controller.rebuild_graph()
 
+    def __on_check_weather_clicked(self):
+        """ Обработчик проверки подключения к погодному сервису """
+        self.__controller.check_weather_connection(
+            self.__urlLineEdit.text(),
+            self.__keyLineEdit.text()
+        )
+
+    def __on_save_weather_clicked(self):
+        """ Обработчик сохранения погодных настроек """
+        self.__controller.save_weather_settings(
+            self.__urlLineEdit.text(),
+            self.__keyLineEdit.text(),
+            self.__fallbackSeasonComboBox.currentData(),
+            self.__summerSpeedSpinBox.value(),
+            self.__winterSpeedSpinBox.value(),
+        )
+
     def __on_save_profile_clicked(self):
-        """Обработчик сохранения профиля"""
+        """ Обработчик сохранения профиля """
         self.__controller.save_profile(
-            self.profileNameEdit.text(),
-            self.vehicleTypeComboBox.currentData(),
-            self.profileHeightSpinBox.value(),
-            self.profileWidthSpinBox.value(),
-            self.profileDepthSpinBox.value(),
-            self.profileWeightSpinBox.value(),
+            self.__profileNameEdit.text(),
+            self.__vehicleTypeComboBox.currentData(),
+            self.__profileHeightSpinBox.value(),
+            self.__profileWidthSpinBox.value(),
+            self.__profileDepthSpinBox.value(),
+            self.__profileWeightSpinBox.value(),
         )
 
     def __on_create_profile_clicked(self):
-        """Обработчик создания нового профиля"""
-        self.profilesListWidget.clearSelection()
+        """ Обработчик создания нового профиля """
+        self.__profilesListWidget.clearSelection()
         self.__clear_profile_form()
         self.__controller.start_profile_create()
 
     def __on_profile_selection_changed(self):
-        """Обработчик изменения выделения в списке профилей"""
+        """ Обработчик изменения выделения в списке профилей """
         profile_id = self.__get_selected_profile_id()
         self.__controller.select_profile(profile_id)
 
     def __on_profile_double_clicked(self, item):
-        """Обработчик двойного клика по профилю"""
+        """ Обработчик двойного клика по профилю """
         profile_id = item.data(QtCore.Qt.ItemDataRole.UserRole)
         if profile_id is not None:
             self.__controller.select_profile(profile_id)
             self.__controller.set_active_profile()
 
     def __get_selected_profile_id(self) -> int | None:
-        """Получить ID выбранного профиля"""
-        item = self.profilesListWidget.currentItem()
+        """ Получить ID выбранного профиля"""
+        item = self.__profilesListWidget.currentItem()
         if item is None:
             return None
         return item.data(QtCore.Qt.ItemDataRole.UserRole)
 
     def closeEvent(self, event):
-        """Обработчик закрытия окна"""
+        """ Обработчик закрытия окна """
         if self.__model.editing_mode == FormMode.EDIT or self.__model.editing_mode == FormMode.CREATE:
             close_question = self._show_question(
                 "Вы уверены, что хотите отменить несохранённые изменения и закрыть окно настроек?"

@@ -2,3 +2,4 @@ from .routing_service import RoutingService
 from .settings_service import SettingsService
 from .restriction_service import RestrictionService
 from .spatial_data_service import SpatialDataService
+from .weather_service import WeatherService

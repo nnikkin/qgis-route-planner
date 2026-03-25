@@ -83,11 +83,11 @@ class DbConfigModel(QObject):
         self.schema_changed.emit(value)
 
     def validate_values_for_schema(self):
-        """Проверка введённых значений, нужных для получения списка схем"""
+        """ Проверка введённых значений, нужных для получения списка схем """
         return all([self.host, self.port, self.username, self.password, self.database])
 
     def validate_all_values(self):
-        """Проверка всех значений, нужных для подключения"""
+        """ Проверка всех значений, нужных для подключения """
         return all([self.host, self.port, self.username, self.password, self.database, self.schema])
 
     def __on_any_changed(self, _):

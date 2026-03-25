@@ -3,7 +3,7 @@ from qgis.gui import QgsMapCanvas, QgsMapToolEmitPoint, QgsVertexMarker
 from qgis.core import QgsPointXY
 
 class SelectPointMapTool(QgsMapToolEmitPoint):
-    """Инструмент выбора точки маршрута на карте"""
+    """ Инструмент выбора точки маршрута на карте """
     pointClicked = pyqtSignal(QgsPointXY)
 
     def __init__(self, canvas: QgsMapCanvas):

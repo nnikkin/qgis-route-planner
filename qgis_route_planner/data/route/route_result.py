@@ -3,7 +3,7 @@ from ...utils import DoublyLinkedList
 
 
 class RouteResult:
-    """Результат расчёта маршрута"""
+    """ Результат расчёта маршрута """
     def __init__(self):
         self.__edges: DoublyLinkedList = DoublyLinkedList()
         self.__next_edge_id = 1

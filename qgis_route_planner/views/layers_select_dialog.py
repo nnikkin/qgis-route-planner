@@ -13,7 +13,7 @@ from ..utils import GeometryType, LayerRole
 
 
 class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
-    """Диалоговое окно выбора слоя для обработки"""
+    """ Диалоговое окно выбора слоя для обработки """
 
     def __init__(
             self,
@@ -28,7 +28,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__available_layers: list = []
 
-        self.setupUi()
+        self.__setupUi()
 
     def __connect(self):
         self.pushItemToTableButton.clicked.connect(self.__on_push_to_table_clicked)
@@ -41,7 +41,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__controller.layers_selected.connect(self.accept)
         self.__controller.layer_selection_failed.connect(self.__on_layer_selection_failed)
 
-    def setupUi(self):
+    def __setupUi(self):
         self.setObjectName("SelectLayersDialog")
         self.resize(800, 400)
 
@@ -134,11 +134,11 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.setTabOrder(self.pushItemToTableButton, self.pushItemToListButton)
         self.setTabOrder(self.pushItemToListButton, self.tableWidget)
 
-        self.retranslateUi()
+        self.__retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
         self.__connect()
 
-    def retranslateUi(self):
+    def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
         self.setWindowTitle(_translate("Dialog", "Шаг 2: выбор таблицы"))
         self.label.setText(_translate("Dialog", "Выберите слои с геометрией LineString из базы данных для обработки."))

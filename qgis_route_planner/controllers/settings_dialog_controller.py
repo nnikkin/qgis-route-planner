@@ -9,17 +9,19 @@ from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 
 from ..utils import FormMode
 from ..data.vehicle import VehicleProfile
+from ..services.weather_service import WeatherService
 from .base_controller import BaseController
 
 
 class SettingsDialogController(BaseController):
-    """Контроллер окна настроек"""
+    """ Контроллер окна настроек """
 
     open_page_requested = pyqtSignal(int)
     request_delete_confirmation = pyqtSignal(str, bool)
 
     reconnect_requested = pyqtSignal()
     graph_rebuild_requested = pyqtSignal()
+    weather_settings_saved = pyqtSignal(dict)
 
     active_profile_changed = pyqtSignal(object)
 
@@ -34,20 +36,21 @@ class SettingsDialogController(BaseController):
         self.__service = settings_service
 
     def open_dialog_tab(self, tab_index: int = 0):
-        """Открыть диалог настроек"""
+        """ Открыть диалог настроек """
         self.__load_initial_state()
         self.open_page_requested.emit(tab_index)
 
     def __load_initial_state(self):
-        """Загрузить начальное состояние"""
+        """ Загрузить начальное состояние """
         self.__load_db_params()
         self.__load_profiles()
+        self.__load_weather_settings()
         self.__model.current_profile_id = None
         self.__model.current_profile_data = None
         self.__model.editing_mode = FormMode.EMPTY
 
     def __load_db_params(self):
-        """Загрузить параметры БД в модель"""
+        """ Загрузить параметры БД в модель """
         try:
             db = self.__service.load_db_params()
             self.__model.db_params = db
@@ -55,47 +58,95 @@ class SettingsDialogController(BaseController):
             self.show_error.emit(f"Ошибка загрузки параметров подключения к БД: {e}")
 
     def __load_profiles(self):
-        """Загрузить список профилей в модель"""
+        """ Загрузить список профилей в модель """
         try:
             self.__model.profiles = self.__service.get_profiles()
             self.__model.active_profile_id = self.__service.get_active_profile_id()
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профилей ТС: {e}")
 
+    def __load_weather_settings(self):
+        """ Загрузить настройки погодного сервиса в модель """
+        try:
+            self.__model.weather_settings = self.__service.load_weather_settings()
+        except Exception as e:
+            self.show_error.emit(f"Ошибка загрузки настроек погодного сервиса: {e}")
+
     @pyqtSlot()
     def change_db_connection(self):
-        """Запрос на изменение параметров БД"""
+        """ Запрос на изменение параметров БД """
         self.reconnect_requested.emit()
 
     @pyqtSlot()
     def reconnect_with_new_params(self):
-        """Переподключение с новыми параметрами (будет вызвано из plugin_controller)"""
+        """ Переподключение с новыми параметрами (будет вызвано из plugin_controller)"""
 
         self.__load_db_params()
         self.show_info.emit("Параметры подключения к БД обновлены")
 
     @pyqtSlot()
     def rebuild_graph(self):
-        """Запросить перестроение графа"""
+        """ Запросить перестроение графа """
         self.graph_rebuild_requested.emit()
+
+    @pyqtSlot(str, str, str, float, float)
+    def save_weather_settings(
+            self,
+            api_url: str,
+            api_key: str,
+            fallback_season: str,
+            summer_avg_speed_kmh: float,
+            winter_avg_speed_kmh: float,
+    ):
+        """ Сохранить настройки погодного сервиса и сезонных скоростей """
+        if summer_avg_speed_kmh <= 0 or winter_avg_speed_kmh <= 0:
+            self.show_warning.emit("Средняя скорость должна быть больше 0 км/ч.")
+            return
+
+        try:
+            self.__service.save_weather_settings(
+                api_key.strip(),
+                fallback_season,
+                summer_avg_speed_kmh,
+                winter_avg_speed_kmh,
+            )
+            settings = self.__service.load_weather_settings()
+            self.__model.weather_settings = settings
+            self.weather_settings_saved.emit(settings)
+            self.show_info.emit("Настройки погодного сервиса сохранены")
+        except Exception as e:
+            self.show_error.emit(f"Ошибка сохранения настроек погодного сервиса: {e}")
+
+    @pyqtSlot(str, str)
+    def check_weather_connection(self, api_url: str, api_key: str):
+        """ Проверить подключение к OpenWeatherMap """
+        if not api_key.strip():
+            self.show_warning.emit("Введите API-ключ OpenWeatherMap.")
+            return
+
+        weather_service = WeatherService(api_url=api_url.strip(), api_key=api_key.strip())
+        if weather_service.test_connection():
+            self.show_info.emit("Подключение к OpenWeatherMap успешно проверено")
+        else:
+            self.show_error.emit("Не удалось подключиться к OpenWeatherMap. Проверьте правильность ввода API-ключа.")
 
     @pyqtSlot()
     def start_profile_create(self):
-        """Начать создание нового профиля"""
+        """ Начать создание нового профиля """
         self.__model.current_profile_id = None
         self.__model.current_profile_data = None
         self.__model.editing_mode = FormMode.CREATE
 
     @pyqtSlot()
     def start_profile_edit(self):
-        """Начать редактирование текущего профиля"""
+        """ Начать редактирование текущего профиля """
         if self.__model.current_profile_id is None:
             return
         self.__model.editing_mode = FormMode.EDIT
 
     @pyqtSlot()
     def cancel_profile_edit(self):
-        """Отменить редактирование профиля"""
+        """ Отменить редактирование профиля """
         if self.__model.current_profile_id is None:
             self.__model.editing_mode = FormMode.EMPTY
             return
@@ -104,7 +155,7 @@ class SettingsDialogController(BaseController):
         self.__model.editing_mode = FormMode.VIEW
 
     def __load_current_profile_data(self):
-        """Загрузить данные текущего профиля в модель"""
+        """ Загрузить данные текущего профиля в модель """
         if self.__model.current_profile_id is None:
             self.__model.current_profile_data = None
             return
@@ -117,7 +168,7 @@ class SettingsDialogController(BaseController):
 
     @pyqtSlot(int)
     def select_profile(self, profile_id: int):
-        """Выбрать профиль для просмотра/редактирования"""
+        """ Выбрать профиль для просмотра/редактирования """
         self.__model.current_profile_id = profile_id
         if profile_id is None:
             self.__model.current_profile_data = None
@@ -130,7 +181,7 @@ class SettingsDialogController(BaseController):
     @pyqtSlot(str, object, float, float, float, float)
     def save_profile(self, name: str, vehicle_type: VehicleType, height: float, width: float, depth: float,
                      weight: float):
-        """Сохранить профиль"""
+        """ Сохранить профиль """
         mode = self.__model.editing_mode
         if not (mode == FormMode.EDIT or mode == FormMode.CREATE):
             return
@@ -169,7 +220,7 @@ class SettingsDialogController(BaseController):
 
     @pyqtSlot()
     def request_delete_profile(self):
-        """Запросить подтверждение удаления профиля"""
+        """ Запросить подтверждение удаления профиля """
         profile_id = self.__model.current_profile_id
         if profile_id is None:
             return
@@ -186,7 +237,7 @@ class SettingsDialogController(BaseController):
 
     @pyqtSlot()
     def confirm_delete_profile(self):
-        """Подтвержденное удаление профиля"""
+        """ Подтвержденное удаление профиля """
         try:
             profile_id = self.__model.current_profile_id
             if profile_id is None:
@@ -212,13 +263,12 @@ class SettingsDialogController(BaseController):
 
     @pyqtSlot()
     def set_active_profile(self):
-        """Установить текущий профиль как активный"""
+        """ Установить текущий профиль как активный """
         profile_id = self.__model.current_profile_id
         if profile_id is None:
             return
 
         if self.__model.active_profile_id == profile_id:
-            print(f"self.__model.active_profile_id == profile_id {self.__model.active_profile_id == profile_id}")
             return
 
         try:

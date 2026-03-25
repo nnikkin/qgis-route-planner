@@ -5,7 +5,7 @@ from ...utils import DoublyLinkedList
 
 
 class SelectedPointCollection:
-    """Коллекция точек, выбранных для расчёта маршрута."""
+    """ Коллекция точек, выбранных для расчёта маршрута  """
 
     def __init__(self):
         self.__points: DoublyLinkedList = DoublyLinkedList()
@@ -22,6 +22,9 @@ class SelectedPointCollection:
     def get_point_ids(self) -> list[int]:
         return [p.node_id for p in self.__points]
 
+    def get_route_points(self) -> list[RoutePoint]:
+        return list(self.__points)
+
     def has_start(self) -> bool:
         pass
 
@@ -32,12 +35,12 @@ class SelectedPointCollection:
         pass
 
     def __reindex(self):
-        """Обновляет поле order у каждой точки согласно их позиции в списке."""
+        """ Обновляет поле order у каждой точки согласно их позиции в списке"""
         for index, point in enumerate(self.__points):
             point.order = index
 
     def __insert_order(self, point_type: PointType) -> int:
-        """Определяет порядковый номер для новой точки."""
+        """ Определяет порядковый номер для новой точки  """
         if point_type == PointType.START:
             return -1
 
@@ -48,9 +51,16 @@ class SelectedPointCollection:
         end_point = next((p for p in self.__points if p.point_type == PointType.END), None)
         return end_point.order if end_point else len(self.__points)
 
-    def add_point(self, qgs_point_xy: QgsPointXY, point_type: PointType, node_id: int):
-        if not qgs_point_xy or not point_type or not node_id:
-            raise BaseException("Для добавления требуются координаты, тип и ИД точки")
+    def add_point(
+            self,
+            qgs_point_xy: QgsPointXY,
+            point_type: PointType,
+            node_id: int = None,
+            edge_id: int = None,
+            fraction: float = None,
+    ):
+        if not qgs_point_xy or not point_type or (node_id is None and edge_id is None):
+            raise BaseException("Для добавления требуются координаты, тип и привязка к дороге")
 
         order = self.__insert_order(point_type)
         route_point = RoutePoint(
@@ -59,6 +69,8 @@ class SelectedPointCollection:
             point_type=point_type,
             order=order,
             node_id=node_id,
+            edge_id=edge_id,
+            fraction=fraction,
         )
 
         self.__next_point_id += 1

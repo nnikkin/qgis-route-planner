@@ -4,19 +4,20 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..controllers import RestrictionDialogController
-    from ..data.route import RestrictionModel
+    from ..data.models import RestrictionModel
 
 from qgis.PyQt import QtCore, QtWidgets
-from qgis.PyQt.QtCore import pyqtSignal, QDateTime, QObject, QSize
+from qgis.PyQt.QtCore import QDateTime, QObject, QSize
 from qgis.PyQt.QtGui import QIcon
 
 from .message_box_mixin import MessageBoxMixin
 from ..data.models import RestrictionType
+from ..data.route import RestrictionRecord
 from ..utils import FormMode
 
 
 class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
-    """Диалог организации ограничений"""
+    """ Диалог организации ограничений """
 
     def __init__(
             self,
@@ -35,22 +36,30 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__connect_ui_signals()
 
     def __connect_controller_signals(self):
-        """Сигналы от контроллера к view"""
+        self.restrictionNameEdit.textChanged.connect(self.__controller.change_name_value)
+        self.restrictionCommentEdit.textChanged.connect(self.__controller.change_comment_value)
+
         self.__controller.show_error.connect(self.show_critical_message)
         self.__controller.show_warning.connect(self.show_warning_message)
         self.__controller.show_info.connect(self.show_info_message)
         self.__controller.open_requested.connect(self.open)
         self.__controller.point_selected.connect(self.on_point_selected_callback)
-        self.__controller.load_restrictions_list.connect(self.set_restrictions_list)
-        self.__controller.load_restriction_to_form.connect(self.load_restriction_to_form)
-        self.__controller.set_form_state.connect(self.set_form_state)
-        self.__controller.clear_form.connect(self.clear_form)
-        self.__controller.set_list_buttons_enabled.connect(self.set_list_buttons_enabled)
+
+        self.__model.restriction_type_changed.connect(self.__on_restriction_type_value_changed)
+        self.__model.name_changed.connect(self.__on_name_value_changed)
+        self.__model.comment_changed.connect(self.__on_comment_value_changed)
+        self.__model.point_changed.connect(self.__on_start_point_value_changed)
+        self.__model.valid_from_changed.connect(self.__on_valid_from_value_changed)
+        self.__model.valid_to_changed.connect(self.__on_valid_to_value_changed)
+        self.__model.max_height_changed.connect(self.__on_max_height_value_changed)
+        self.__model.max_width_changed.connect(self.__on_max_width_value_changed)
+        self.__model.max_weight_changed.connect(self.__on_max_weight_value_changed)
+        self.__model.restrictions_changed.connect(self.set_restrictions_list)
+        self.__model.current_restriction_id_changed.connect(self.__on_current_id_changed)
+        self.__model.editing_mode_changed.connect(self.set_form_state)
 
     def __connect_ui_signals(self):
-        """Сигналы от UI-элементов к контроллеру"""
-        for rt in RestrictionType:
-            self.restrictionTypeComboBox.addItem(rt.value, rt)
+        """ Сигналы от UI-элементов к контроллеру"""
         self.restrictionTypeComboBox.currentIndexChanged.connect(self.__on_type_changed)
 
         self.restrictionListWidget.itemSelectionChanged.connect(
@@ -71,22 +80,11 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
             self.__controller.on_cancel_edit
         )
 
-        self.radioButton_one.toggled.connect(self.__on_points_count_changed)
-        self.radioButton_multiple.toggled.connect(self.__on_points_count_changed)
-
-        self.chooseStartPointButton.clicked.connect(
+        self.choosePointButton.clicked.connect(
             lambda: self.__on_select_point_clicked("start")
         )
-        self.chooseMidPointsButton.clicked.connect(
-            lambda: self.__on_select_point_clicked("mid")
-        )
-        self.chooseEndPointButton.clicked.connect(
-            lambda: self.__on_select_point_clicked("end")
-        )
 
-        self.clearStartButton.clicked.connect(lambda: self.__clear_point("start"))
-        self.clearMidListButton.clicked.connect(lambda: self.__clear_points("mid"))
-        self.clearEndButton.clicked.connect(lambda: self.__clear_point("end"))
+        self.clearPointFieldButton.clicked.connect(lambda: self.__clear_point("start"))
 
     def setupUi(self):
         self.setObjectName("RestrictionDialog")
@@ -147,28 +145,12 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.restrictionTypeComboBox = QtWidgets.QComboBox(self.restrictionForm)
         self.restrictionTypeComboBox.setObjectName("restrictionTypeComboBox")
+        for rt in RestrictionType:
+            self.restrictionTypeComboBox.addItem(rt.value, rt)
+        self.restrictionTypeComboBox.setCurrentIndex(0)
         self.restrictionTypeComboBox.setEnabled(False)
         self.typeFormLayout.setWidget(
             0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.restrictionTypeComboBox
-        )
-
-        self.radioBtnsLayout = QtWidgets.QVBoxLayout()
-        self.radioBtnsLayout.setObjectName("radioBtnsLayout")
-        self.radioBtnsLayout.setContentsMargins(-1, -1, -1, 10)
-
-        self.radioButton_one = QtWidgets.QRadioButton(self.restrictionForm)
-        self.radioButton_one.setObjectName("radioButton_one")
-        self.radioButton_one.setEnabled(False)
-        self.radioButton_one.setChecked(True)
-        self.radioBtnsLayout.addWidget(self.radioButton_one)
-
-        self.radioButton_multiple = QtWidgets.QRadioButton(self.restrictionForm)
-        self.radioButton_multiple.setObjectName("radioButton_multiple")
-        self.radioButton_multiple.setEnabled(False)
-        self.radioBtnsLayout.addWidget(self.radioButton_multiple)
-
-        self.typeFormLayout.setLayout(
-            1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.radioBtnsLayout
         )
         self.restrictionFormLayout.addLayout(self.typeFormLayout)
 
@@ -198,70 +180,23 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.formLayout.setWidget(
             0, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label
         )
-        self.startPointLayout = QtWidgets.QHBoxLayout()
-        self.startPointEdit = QtWidgets.QLineEdit(self.restrictionForm)
-        self.startPointEdit.setEnabled(False)
-        self.startPointEdit.setReadOnly(True)
-        self.startPointLayout.addWidget(self.startPointEdit)
-        self.chooseStartPointButton = QtWidgets.QPushButton("Выбрать", self.restrictionForm)
-        self.chooseStartPointButton.setEnabled(False)
-        self.startPointLayout.addWidget(self.chooseStartPointButton)
-        self.clearStartButton = QtWidgets.QPushButton(self.restrictionForm)
-        self.clearStartButton.setEnabled(False)
-        self.clearStartButton.setIcon(icon)
-        self.startPointLayout.addWidget(self.clearStartButton)
-        self.formLayout.setLayout(
-            0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.startPointLayout
-        )
+        self.pointSelectLayout = QtWidgets.QHBoxLayout()
 
-        self.label_3 = QtWidgets.QLabel(self.restrictionForm)
-        self.label_3.setObjectName("label_3")
-        self.label_3.setWordWrap(True)
-        self.formLayout.setWidget(
-            1, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_3
-        )
-        self.midPointsLayoutWidget = QtWidgets.QWidget()
-        self.midPointsLayout = QtWidgets.QHBoxLayout(self.midPointsLayoutWidget)
-        self.midPointsLayout.setContentsMargins(0, 0, 0, 0)
-        self.midPointsListView = QtWidgets.QListWidget(self.restrictionForm)
-        self.midPointsListView.setEnabled(False)
-        self.midPointsListView.setMaximumHeight(100)
-        self.midPointsListView.setVerticalScrollBarPolicy(
-            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn
-        )
-        self.midPointsLayout.addWidget(self.midPointsListView)
-        self.midPointsButtonsLayout = QtWidgets.QVBoxLayout()
-        self.chooseMidPointsButton = QtWidgets.QPushButton("Выбрать", self.restrictionForm)
-        self.chooseMidPointsButton.setEnabled(False)
-        self.midPointsButtonsLayout.addWidget(self.chooseMidPointsButton)
-        self.clearMidListButton = QtWidgets.QPushButton(self.restrictionForm)
-        self.clearMidListButton.setEnabled(False)
-        self.clearMidListButton.setIcon(icon)
-        self.midPointsButtonsLayout.addWidget(self.clearMidListButton)
-        self.midPointsLayout.addLayout(self.midPointsButtonsLayout)
-        self.formLayout.setWidget(
-            1, QtWidgets.QFormLayout.ItemRole.FieldRole, self.midPointsLayoutWidget
-        )
+        self.pointEdit = QtWidgets.QLineEdit(self.restrictionForm)
+        self.pointEdit.setEnabled(False)
+        self.pointEdit.setReadOnly(True)
+        self.pointSelectLayout.addWidget(self.pointEdit)
 
-        self.label_4 = QtWidgets.QLabel(self.restrictionForm)
-        self.label_4.setObjectName("label_4")
-        self.formLayout.setWidget(
-            2, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_4
-        )
-        self.endPointLayout = QtWidgets.QHBoxLayout()
-        self.endPointEdit = QtWidgets.QLineEdit(self.restrictionForm)
-        self.endPointEdit.setEnabled(False)
-        self.endPointEdit.setReadOnly(True)
-        self.endPointLayout.addWidget(self.endPointEdit)
-        self.chooseEndPointButton = QtWidgets.QPushButton("Выбрать", self.restrictionForm)
-        self.chooseEndPointButton.setEnabled(False)
-        self.endPointLayout.addWidget(self.chooseEndPointButton)
-        self.clearEndButton = QtWidgets.QPushButton(self.restrictionForm)
-        self.clearEndButton.setEnabled(False)
-        self.clearEndButton.setIcon(icon)
-        self.endPointLayout.addWidget(self.clearEndButton)
+        self.choosePointButton = QtWidgets.QPushButton("Выбрать", self.restrictionForm)
+        self.choosePointButton.setEnabled(False)
+        self.pointSelectLayout.addWidget(self.choosePointButton)
+
+        self.clearPointFieldButton = QtWidgets.QPushButton(self.restrictionForm)
+        self.clearPointFieldButton.setEnabled(False)
+        self.clearPointFieldButton.setIcon(icon)
+        self.pointSelectLayout.addWidget(self.clearPointFieldButton)
         self.formLayout.setLayout(
-            2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.endPointLayout
+            0, QtWidgets.QFormLayout.ItemRole.FieldRole, self.pointSelectLayout
         )
 
         self.restrictionFormLayout.addLayout(self.formLayout)
@@ -306,57 +241,72 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.deleteRestrictionButton.setText(_t("RestrictionDialog", "Удалить"))
         self.editRestrictionButton.setText(_t("RestrictionDialog", "Изменить"))
         self.label_2.setText(_t("RestrictionDialog", "Тип:"))
-        self.radioButton_one.setText(_t("RestrictionDialog", "Одна точка"))
-        self.radioButton_multiple.setText(_t("RestrictionDialog", "Несколько точек"))
-        self.label.setText(_t("RestrictionDialog", "Начальная точка:"))
-        self.label_3.setText(_t("RestrictionDialog", "Промежуточные точки:"))
-        self.label_4.setText(_t("RestrictionDialog", "Конечная точка:"))
-        self.clearStartButton.setText("✕")
-        self.clearMidListButton.setText("✕")
-        self.clearEndButton.setText("✕")
+        self.label.setText(_t("RestrictionDialog", "Точка:"))
+        self.clearPointFieldButton.setText("✕")
 
     def __build_dimension_page(self):
         page = QtWidgets.QWidget()
         layout = QtWidgets.QFormLayout(page)
+
         self.dimHeightSpin = QtWidgets.QDoubleSpinBox()
         self.dimHeightSpin.setSuffix(" м")
         self.dimHeightSpin.setMaximum(99.0)
         self.dimHeightSpin.setEnabled(False)
+        self.dimHeightSpin.valueChanged.connect(
+            self.__controller.change_max_height_value
+        )
+
         self.dimWidthSpin = QtWidgets.QDoubleSpinBox()
         self.dimWidthSpin.setSuffix(" м")
         self.dimWidthSpin.setMaximum(99.0)
         self.dimWidthSpin.setEnabled(False)
-        self.dimLengthSpin = QtWidgets.QDoubleSpinBox()
-        self.dimLengthSpin.setSuffix(" м")
-        self.dimLengthSpin.setMaximum(99.0)
-        self.dimLengthSpin.setEnabled(False)
+        self.dimWidthSpin.valueChanged.connect(
+            self.__controller.change_max_width_value
+        )
+
         self.dimWeightSpin = QtWidgets.QDoubleSpinBox()
         self.dimWeightSpin.setSuffix(" т")
         self.dimWeightSpin.setMaximum(999.0)
         self.dimWeightSpin.setEnabled(False)
+        self.dimWeightSpin.valueChanged.connect(
+            self.__controller.change_max_weight_value
+        )
+
         layout.addRow("Макс. высота:", self.dimHeightSpin)
         layout.addRow("Макс. ширина:", self.dimWidthSpin)
-        layout.addRow("Макс. длина:", self.dimLengthSpin)
         layout.addRow("Макс. вес:", self.dimWeightSpin)
         return page
 
     def __build_temporary_page(self):
         page = QtWidgets.QWidget()
         layout = QtWidgets.QFormLayout(page)
+
         self.tmpDateFrom = QtWidgets.QDateTimeEdit()
         self.tmpDateFrom.setCalendarPopup(True)
         self.tmpDateFrom.setDisplayFormat("dd.MM.yyyy HH:mm")
         self.tmpDateFrom.setEnabled(False)
+        self.tmpDateFrom.dateTimeChanged.connect(
+            self.__controller.change_valid_from_value
+        )
+
         self.tmpDateTo = QtWidgets.QDateTimeEdit()
         self.tmpDateTo.setCalendarPopup(True)
         self.tmpDateTo.setDisplayFormat("dd.MM.yyyy HH:mm")
         self.tmpDateTo.setEnabled(False)
+        self.tmpDateTo.dateTimeChanged.connect(
+            self.__controller.change_valid_to_value
+        )
+
         layout.addRow("Начало действия:", self.tmpDateFrom)
         layout.addRow("Конец действия:", self.tmpDateTo)
         return page
 
     def __on_type_changed(self, index: int):
         rt = self.restrictionTypeComboBox.itemData(index)
+        self.__set_type_page(rt)
+        self.__controller.change_restriction_type_value(rt)
+
+    def __set_type_page(self, rt: RestrictionType):
         page_map = {
             RestrictionType.SIMPLE: 0,
             RestrictionType.DIMENSION: 1,
@@ -364,20 +314,11 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         }
         self.stackedWidget.setCurrentIndex(page_map.get(rt, 0))
 
-    def __on_points_count_changed(self):
-        is_single = self.radioButton_one.isChecked()
-        self.midPointsLayoutWidget.setVisible(not is_single)
-        self.label_3.setVisible(not is_single)
-        self.endPointEdit.setVisible(not is_single)
-        self.chooseEndPointButton.setVisible(not is_single)
-        self.clearEndButton.setVisible(not is_single)
-        self.label_4.setVisible(not is_single)
-
     def __on_list_selection_changed(self):
         self.__controller.on_restriction_selected(self.get_selected_restriction_id())
 
     def __on_save_clicked(self):
-        self.__controller.on_save_restriction(self.collect_form_data())
+        self.__controller.on_save_restriction()
 
     def __on_select_point_clicked(self, point_type: str):
         self.__current_point_type = point_type
@@ -385,89 +326,60 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.hide()
 
     def __clear_point(self, point_type: str):
-        if point_type == "start":
-            self.startPointEdit.clear()
-            self.startPointEdit.setProperty("node_id", None)
-        elif point_type == "end":
-            self.endPointEdit.clear()
-            self.endPointEdit.setProperty("node_id", None)
+        self.__controller.change_point_value(None, None)
 
-    def __clear_points(self, point_type: str):
-        if point_type == "mid":
-            self.midPointsListView.clear()
-
-    def collect_form_data(self) -> dict:
-        data = {
-            "name": self.restrictionNameEdit.text().strip(),
-            "comment": self.restrictionCommentEdit.text().strip(),
-            "restriction_type": self.get_current_type(),
-            "start_node": self.startPointEdit.property("node_id"),
-            "mid_nodes": [],
-            "end_node": self.endPointEdit.property("node_id"),
-        }
-        for i in range(self.midPointsListView.count()):
-            item = self.midPointsListView.item(i)
-            data["mid_nodes"].append(item.data(QtCore.Qt.ItemDataRole.UserRole))
-
-        rt = data["restriction_type"]
-        if rt == RestrictionType.DIMENSION:
-            data["dimension_values"] = {
-                "height": self.dimHeightSpin.value(),
-                "width": self.dimWidthSpin.value(),
-                "length": self.dimLengthSpin.value(),
-                "weight": self.dimWeightSpin.value(),
-            }
-        elif rt == RestrictionType.TEMPORARY:
-            data["temporary_dates"] = {
-                "from": self.tmpDateFrom.dateTime().toString("yyyy-MM-dd HH:mm"),
-                "to": self.tmpDateTo.dateTime().toString("yyyy-MM-dd HH:mm"),
-            }
-        return data
 
     def get_selected_restriction_id(self) -> int | None:
         items = self.restrictionListWidget.selectedItems()
         return items[0].data(QtCore.Qt.ItemDataRole.UserRole) if items else None
 
-    def get_current_type(self) -> RestrictionType:
-        return self.restrictionTypeComboBox.currentData()
-
-    def set_restrictions_list(self, restrictions: list[dict]):
+    def set_restrictions_list(self, restrictions: list[RestrictionRecord]):
+        self.restrictionListWidget.blockSignals(True)
         self.restrictionListWidget.clear()
         for r in restrictions:
-            label = f"{r.get('name', '—')} [{r.get('restriction_type_name', '')}]"
+            if isinstance(r, dict):
+                restriction_id = r.get("id")
+                name = r.get("name", "—")
+                type_name = r.get(
+                    "restriction_type_name",
+                    RestrictionRecord.id_to_type_name(r.get("restriction_type_id", 1))
+                )
+            else:
+                restriction_id = r.id
+                name = r.name or "—"
+                type_name = RestrictionRecord.id_to_type_name(r.restriction_type_id)
+            label = f"{name} [{type_name}]"
             item = QtWidgets.QListWidgetItem(label)
-            item.setData(QtCore.Qt.ItemDataRole.UserRole, r.get("id"))
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, restriction_id)
             self.restrictionListWidget.addItem(item)
+            if restriction_id == self.__model.current_restriction_id:
+                self.restrictionListWidget.setCurrentItem(item)
+        self.restrictionListWidget.blockSignals(False)
 
     def set_form_state(self, mode: FormMode):
         is_editing = mode in (FormMode.EDIT, FormMode.CREATE)
-        has_selection = mode == FormMode.VIEW
+        has_selection = self.__model.current_restriction_id is not None
 
         for w in (
                 self.restrictionTypeComboBox,
                 self.restrictionNameEdit,
                 self.restrictionCommentEdit,
-                self.radioButton_one,
-                self.radioButton_multiple,
-                self.chooseStartPointButton,
-                self.chooseMidPointsButton,
-                self.chooseEndPointButton,
-                self.clearStartButton,
-                self.clearMidListButton,
-                self.clearEndButton,
+                self.choosePointButton,
+                self.clearPointFieldButton,
                 self.saveRestrictionButton,
                 self.cancelRestrictionEditButton,
                 self.dimHeightSpin,
                 self.dimWidthSpin,
-                self.dimLengthSpin,
                 self.dimWeightSpin,
                 self.tmpDateFrom,
                 self.tmpDateTo,
         ):
             w.setEnabled(is_editing)
 
-        self.editRestrictionButton.setEnabled(has_selection)
-        self.deleteRestrictionButton.setEnabled(has_selection)
+        self.createRestrictionButton.setEnabled(not is_editing)
+        self.restrictionListWidget.setEnabled(not is_editing)
+        self.editRestrictionButton.setEnabled(has_selection and not is_editing)
+        self.deleteRestrictionButton.setEnabled(has_selection and not is_editing)
 
     def set_list_buttons_enabled(self, enabled: bool):
         self.editRestrictionButton.setEnabled(enabled)
@@ -476,76 +388,110 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
     def clear_form(self):
         self.restrictionNameEdit.clear()
         self.restrictionCommentEdit.clear()
-        self.startPointEdit.clear()
-        self.startPointEdit.setProperty("node_id", None)
-        self.midPointsListView.clear()
-        self.endPointEdit.clear()
-        self.endPointEdit.setProperty("node_id", None)
+        self.pointEdit.clear()
+        self.pointEdit.setProperty("node_id", None)
         self.dimHeightSpin.setValue(0)
         self.dimWidthSpin.setValue(0)
-        self.dimLengthSpin.setValue(0)
         self.dimWeightSpin.setValue(0)
         now = QDateTime.currentDateTime()
         self.tmpDateFrom.setDateTime(now)
         self.tmpDateTo.setDateTime(now.addDays(7))
         self.restrictionTypeComboBox.setCurrentIndex(0)
 
-    def load_restriction_to_form(self, data: dict):
-        self.restrictionNameEdit.setText(data.get("name", ""))
-        self.restrictionCommentEdit.setText(data.get("comment", ""))
+    def __on_current_id_changed(self, restriction_id: int | None):
+        self.set_list_buttons_enabled(restriction_id is not None)
+        if restriction_id is None:
+            self.restrictionListWidget.clearSelection()
 
-        type_id = data.get("restriction_type_id", 1)
-        rt = {1: RestrictionType.SIMPLE,
-              2: RestrictionType.DIMENSION,
-              3: RestrictionType.TEMPORARY}.get(type_id, RestrictionType.SIMPLE)
-        idx = self.restrictionTypeComboBox.findData(rt)
-        if idx >= 0:
-            self.restrictionTypeComboBox.setCurrentIndex(idx)
+    def __on_restriction_type_value_changed(self, value: RestrictionType):
+        self.__set_combo_value(self.restrictionTypeComboBox, value)
+        self.__set_type_page(value)
 
-        self.startPointEdit.clear()
-        self.startPointEdit.setProperty("node_id", None)
-        self.midPointsListView.clear()
-        self.endPointEdit.clear()
-        self.endPointEdit.setProperty("node_id", None)
+    def __on_name_value_changed(self, value: str):
+        self.__set_line_edit_value(self.restrictionNameEdit, value)
 
-        node_id = data.get("node_id")
-        if node_id:
-            self.startPointEdit.setText(f"Node {node_id}")
-            self.startPointEdit.setProperty("node_id", node_id)
-            self.radioButton_one.setChecked(True)
+    def __on_comment_value_changed(self, value: str):
+        self.__set_line_edit_value(self.restrictionCommentEdit, value)
 
-        value_text = data.get("value_text", "")
-        if rt == RestrictionType.DIMENSION and value_text:
-            pairs = dict(p.split("=", 1) for p in value_text.split(";") if "=" in p)
-            self.dimHeightSpin.setValue(float(pairs.get("height", 0)))
-            self.dimWidthSpin.setValue(float(pairs.get("width", 0)))
-            self.dimLengthSpin.setValue(float(pairs.get("length", 0)))
-            self.dimWeightSpin.setValue(float(pairs.get("weight", 0)))
-        elif rt == RestrictionType.TEMPORARY and value_text:
-            pairs = dict(p.split("=", 1) for p in value_text.split(";") if "=" in p)
-            fmt = "yyyy-MM-dd HH:mm"
-            if "from" in pairs:
-                self.tmpDateFrom.setDateTime(QDateTime.fromString(pairs["from"], fmt))
-            if "to" in pairs:
-                self.tmpDateTo.setDateTime(QDateTime.fromString(pairs["to"], fmt))
+    def __on_start_point_value_changed(self, value):
+        self.__set_point_edit_value(self.pointEdit, value)
+
+    def __on_valid_from_value_changed(self, value):
+        self.__set_datetime_value(self.tmpDateFrom, value)
+
+    def __on_valid_to_value_changed(self, value):
+        self.__set_datetime_value(self.tmpDateTo, value)
+
+    def __on_max_height_value_changed(self, value: float):
+        self.__set_spin_value(self.dimHeightSpin, value)
+
+    def __on_max_width_value_changed(self, value: float):
+        self.__set_spin_value(self.dimWidthSpin, value)
+
+    def __on_max_weight_value_changed(self, value: float):
+        self.__set_spin_value(self.dimWeightSpin, value)
+
+    @staticmethod
+    def __set_line_edit_value(widget, value: str):
+        widget.blockSignals(True)
+        widget.setText(value or "")
+        widget.blockSignals(False)
+
+    @staticmethod
+    def __set_spin_value(widget, value: float):
+        widget.blockSignals(True)
+        widget.setValue(float(value or 0))
+        widget.blockSignals(False)
+
+    @staticmethod
+    def __set_combo_value(widget, value):
+        widget.blockSignals(True)
+        index = widget.findData(value)
+        if index >= 0:
+            widget.setCurrentIndex(index)
+        widget.blockSignals(False)
+
+    @staticmethod
+    def __set_datetime_value(widget, value):
+        widget.blockSignals(True)
+        if value:
+            if hasattr(value, "toString"):
+                widget.setDateTime(value)
+            else:
+                dt_value = QDateTime.fromString(str(value), "yyyy-MM-dd HH:mm")
+                if dt_value.isValid():
+                    widget.setDateTime(dt_value)
+        else:
+            widget.setDateTime(QDateTime.currentDateTime())
+        widget.blockSignals(False)
+
+    def __set_point_edit_value(self, widget, value):
+        point, node_id = self.__unpack_point_data(value)
+        widget.blockSignals(True)
+        widget.setText(self.__point_label(point, node_id) if node_id is not None else "")
+        widget.setProperty("node_id", node_id)
+        widget.blockSignals(False)
+
+    @staticmethod
+    def __unpack_point_data(value):
+        if value is None:
+            return None, None
+        if isinstance(value, tuple) and len(value) >= 2:
+            return value[0], value[1]
+        if isinstance(value, dict):
+            return value.get("point"), value.get("node_id")
+        return value, None
+
+    @staticmethod
+    def __point_label(point, node_id):
+        if node_id is None:
+            return ""
+        if point is None:
+            return f"Node {node_id}"
+        return f"Node {node_id} ({point.x():.5f}, {point.y():.5f})"
 
     def on_point_selected_callback(self, point, node_id):
-        if self.__current_point_type == "start":
-            self.startPointEdit.setText(
-                f"Node {node_id} ({point.x():.5f}, {point.y():.5f})"
-            )
-            self.startPointEdit.setProperty("node_id", node_id)
-        elif self.__current_point_type == "mid":
-            item = QtWidgets.QListWidgetItem(
-                f"Node {node_id} ({point.x():.5f}, {point.y():.5f})"
-            )
-            item.setData(QtCore.Qt.ItemDataRole.UserRole, node_id)
-            self.midPointsListView.addItem(item)
-        elif self.__current_point_type == "end":
-            self.endPointEdit.setText(
-                f"Node {node_id} ({point.x():.5f}, {point.y():.5f})"
-            )
-            self.endPointEdit.setProperty("node_id", node_id)
+        self.__controller.change_point_value(point, node_id)
         self.show()
 
     def show_warning_message(self, message: str):
@@ -563,3 +509,7 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
         )
         return reply == QtWidgets.QMessageBox.Yes
+
+    def closeEvent(self, event):
+        """ Обработчик закрытия окна """
+        self.__controller.on_cancel_edit()

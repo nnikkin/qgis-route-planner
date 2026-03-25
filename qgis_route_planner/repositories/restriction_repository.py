@@ -7,7 +7,6 @@ class RestrictionRepository:
         self.__db = db
 
     def create_tables(self):
-        """Создаёт все нужные таблицы"""
         self.__db.execute_nonquery("""
             CREATE TABLE IF NOT EXISTS routing.restriction_types (
                 restriction_type_id SMALLINT PRIMARY KEY,
@@ -40,7 +39,6 @@ class RestrictionRepository:
                 pass
 
     def ensure_default_types(self):
-        """Создаёт таблицы и заполняет справочник типов"""
         self.create_tables()
 
         existing = {row[0] for row in self.get_types()}

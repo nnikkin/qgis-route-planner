@@ -5,12 +5,17 @@ from ..repositories import DbConnection, VehicleProfileRepository
 
 
 class SettingsService:
-    """Сервис для работы с настройками плагина"""
+    """ Сервис для работы с настройками плагина """
 
     __SETTINGS_FILE = "qgis_route_planner.ini"
     __GROUP_DB = "database"
     __GROUP_PROFILES = "profiles"
+    __GROUP_WEATHER = "weather"
     __KEY_ACTIVE_PROFILE = "active_profile_id"
+    __DEFAULT_WEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
+    __DEFAULT_FALLBACK_SEASON = "summer"
+    __DEFAULT_SUMMER_SPEED_KMH = 60.0
+    __DEFAULT_WINTER_SPEED_KMH = 45.0
 
     def __init__(self, vehicle_repo: VehicleProfileRepository):
         self.__settings: QSettings = QSettings(self.__SETTINGS_FILE, QSettings.Format.IniFormat)
@@ -41,6 +46,48 @@ class SettingsService:
         self.__settings.setValue("schema", db.schema)
         self.__settings.endGroup()
         self.__settings.sync()
+
+    # Работа с настройками погодного сервиса
+    def load_weather_settings(self) -> dict:
+        self.__settings.beginGroup(self.__GROUP_WEATHER)
+        settings = {
+            "api_url": self.__settings.value("api_url", self.__DEFAULT_WEATHER_API_URL),
+            "api_key": self.__settings.value("api_key", ""),
+            "fallback_season": self.__settings.value("fallback_season", self.__DEFAULT_FALLBACK_SEASON),
+            "summer_avg_speed_kmh": self.__float_setting(
+                "summer_avg_speed_kmh",
+                self.__DEFAULT_SUMMER_SPEED_KMH
+            ),
+            "winter_avg_speed_kmh": self.__float_setting(
+                "winter_avg_speed_kmh",
+                self.__DEFAULT_WINTER_SPEED_KMH
+            ),
+        }
+        self.__settings.endGroup()
+        return settings
+
+    def save_weather_settings(
+            self,
+            api_key: str,
+            fallback_season: str,
+            summer_avg_speed_kmh: float,
+            winter_avg_speed_kmh: float,
+    ):
+        self.__settings.beginGroup(self.__GROUP_WEATHER)
+        self.__settings.setValue("api_url", self.__DEFAULT_WEATHER_API_URL)
+        self.__settings.setValue("api_key", api_key or "")
+        self.__settings.setValue("fallback_season", fallback_season or self.__DEFAULT_FALLBACK_SEASON)
+        self.__settings.setValue("summer_avg_speed_kmh", summer_avg_speed_kmh)
+        self.__settings.setValue("winter_avg_speed_kmh", winter_avg_speed_kmh)
+        self.__settings.endGroup()
+        self.__settings.sync()
+
+    def __float_setting(self, key: str, default: float) -> float:
+        value = self.__settings.value(key, default)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
 
     # Работа с VehicleProfile

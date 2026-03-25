@@ -1,9 +1,13 @@
+from datetime import datetime
+
+from ..data.models import RestrictionType
 from ..data.route import RestrictionRecord
+from ..data.vehicle import VehicleProfile
 from ..repositories import DbConnection, RestrictionRepository
 
 
 class RestrictionService:
-    """Сервис CRUD для ограничений"""
+    """ Сервис CRUD для ограничений"""
 
     def __init__(self, restriction_repo: RestrictionRepository | None = None):
         self.__restriction_repo = restriction_repo
@@ -35,6 +39,27 @@ class RestrictionService:
             return []
         return self.__restriction_repo.get_types()
 
+    def get_active_restriction_node_ids(
+            self,
+            profile: VehicleProfile | None,
+            at_dt: datetime | None = None,
+    ) -> list[int]:
+        """Вернуть node_id ограничений, актуальных для текущего расчёта."""
+        records = [
+            RestrictionRecord.dict_to_record(row)
+            for row in self.get_all_restrictions()
+        ]
+        current_dt = at_dt or datetime.now()
+        node_ids = []
+
+        for record in records:
+            if record.node_id is None:
+                continue
+            if self.__is_restriction_active(record, profile, current_dt):
+                node_ids.append(record.node_id)
+
+        return list(dict.fromkeys(node_ids))
+
     def create_restriction(self, data: dict | RestrictionRecord) -> bool:
         if not self.__restriction_repo:
             return False
@@ -54,6 +79,60 @@ class RestrictionService:
             return False
         self.__restriction_repo.del_restriction(restriction_id)
         return True
+
+    def __is_restriction_active(
+            self,
+            record: RestrictionRecord,
+            profile: VehicleProfile | None,
+            at_dt: datetime,
+    ) -> bool:
+        restriction_type = RestrictionRecord.id_to_type(record.restriction_type_id)
+
+        if restriction_type == RestrictionType.SIMPLE:
+            return True
+        if restriction_type == RestrictionType.TEMPORARY:
+            return self.__is_temporary_restriction_active(record, at_dt)
+        if restriction_type == RestrictionType.DIMENSION:
+            return self.__is_dimension_restriction_active(record, profile)
+
+        return True
+
+    @staticmethod
+    def __is_temporary_restriction_active(record: RestrictionRecord, at_dt: datetime) -> bool:
+        dates = record.temporary_dates()
+        starts_at = RestrictionService.__parse_storage_datetime(dates.get("from", ""))
+        ends_at = RestrictionService.__parse_storage_datetime(dates.get("to", ""))
+
+        if starts_at and at_dt < starts_at:
+            return False
+        if ends_at and at_dt > ends_at:
+            return False
+        return bool(starts_at or ends_at)
+
+    @staticmethod
+    def __is_dimension_restriction_active(
+            record: RestrictionRecord,
+            profile: VehicleProfile | None,
+    ) -> bool:
+        if profile is None:
+            return False
+
+        values = record.dimension_values()
+        checks = (
+            (profile.height_m, values.get("height", 0)),
+            (profile.width_m, values.get("width", 0)),
+            (profile.weight_t, values.get("weight", 0)),
+        )
+        return any(limit > 0 and actual > limit for actual, limit in checks)
+
+    @staticmethod
+    def __parse_storage_datetime(value: str) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.strptime(value, "%Y-%m-%d %H:%M")
+        except ValueError:
+            return None
 
     @staticmethod
     def __dict_to_record(data: dict) -> RestrictionRecord:

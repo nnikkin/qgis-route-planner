@@ -100,7 +100,7 @@ class RouteListWidget(QToolBox):
         self.__pages.append(route_page)
 
     def __generate_instructions(self, route: list) -> str:
-        """Генерирует текстовые инструкции по маршруту"""
+        """ Генерирует текстовые инструкции по маршруту """
         if not route:
             return "<div>Нет инструкций</div>"
         instructions = []

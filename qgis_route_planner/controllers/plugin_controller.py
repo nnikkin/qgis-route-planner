@@ -15,7 +15,8 @@ from ..services import (
     SpatialDataService,
     RoutingService,
     SettingsService,
-    RestrictionService
+    RestrictionService,
+    WeatherService
 )
 from ..data.models import (
     DbConfigModel,
@@ -43,9 +44,10 @@ from ..views import (
 
 
 class PluginController(BaseController):
-    """Контроллер плагина"""
+    """ Контроллер плагина """
 
     plugin_initialized = pyqtSignal()
+    plugin_init_cancelled = pyqtSignal()
     crit_plugin_error = pyqtSignal()
 
     def __init__(self):
@@ -92,6 +94,7 @@ class PluginController(BaseController):
         self.__spatial_data_service: SpatialDataService | None = None
         self.__routing_service: RoutingService | None = None
         self.__restriction_service: RestrictionService | None = None
+        self.__weather_service: WeatherService | None = None
 
         self.__vehicle_repo: VehicleProfileRepository | None = None
         self.__layer_repo: LayerRepository | None = None
@@ -124,6 +127,7 @@ class PluginController(BaseController):
             model=self.__main_window_model,
             controller=self.__main_window_controller
         )
+
         self.__settings_dialog = SettingsDialog(
             model=self.__settings_model,
             controller=self.__settings_controller
@@ -140,6 +144,7 @@ class PluginController(BaseController):
         )
         self.__settings_controller.reconnect_requested.connect(self.__on_reconnect_requested)
         self.__settings_controller.graph_rebuild_requested.connect(self.__on_graph_rebuild_requested)
+        self.__settings_controller.weather_settings_saved.connect(self.__apply_weather_settings)
 
         self.__restriction_controller = RestrictionDialogController(
             self.__restriction_model,
@@ -148,10 +153,12 @@ class PluginController(BaseController):
 
         self.__main_window_controller = MainWindowController(
             model=self.__main_window_model,
+            restriction_model=self.__restriction_model,
             settings_controller=self.__settings_controller,
             restr_controller=self.__restriction_controller,
             data_service=self.__spatial_data_service,
             routing_service=self.__routing_service,
+            restriction_service=self.__restriction_service,
         )
 
         self.__settings_controller.active_profile_changed.connect(
@@ -172,7 +179,13 @@ class PluginController(BaseController):
             self.__vehicle_repo,
             self.__restriction_repo,
         )
-        self.__routing_service = RoutingService(self.__graph_repo)
+        weather_settings = self.__settings_service.load_weather_settings()
+        self.__weather_service = WeatherService(
+            api_url=weather_settings.get("api_url", ""),
+            api_key=weather_settings.get("api_key", "")
+        )
+        self.__routing_service = RoutingService(self.__graph_repo, self.__weather_service)
+        self.__routing_service.set_weather_settings(weather_settings)
         self.__restriction_service = RestrictionService(self.__restriction_repo)
 
     def __init_everything(self):
@@ -226,7 +239,29 @@ class PluginController(BaseController):
 
     def __columns_configured(self):
         self.__column_mapping = self.__cols_config_model.mappings
+        self.__configure_weather_location()
         self.__initialization_finished()
+
+    def __configure_weather_location(self):
+        if not self.__weather_service:
+            return
+
+        coords = self.__spatial_data_service.get_first_point_source_coordinates(
+            list(self.__selected_layers),
+            dict(self.__column_mapping),
+        )
+        if coords is None:
+            return
+
+        lon, lat = coords
+        self.__weather_service.set_location(lon, lat)
+
+    def __apply_weather_settings(self, settings: dict):
+        if self.__weather_service:
+            self.__weather_service.set_api_key(settings.get("api_key", ""))
+
+        if self.__routing_service:
+            self.__routing_service.set_weather_settings(settings)
 
     def __initialization_finished(self):
         selected_layers = list(self.__selected_layers)
@@ -269,9 +304,12 @@ class PluginController(BaseController):
         if self.__main_window_controller:
             self.__main_window.close()
         self.__init_dialogs_controller = None
+        self.plugin_init_cancelled.emit()
 
     def __initialize_map(self):
-        self.__main_window_controller.initialize_map()
+        self.__main_window_controller.initialize_map(
+            selected_layers=list(getattr(self, "_PluginController__selected_layers", []))
+        )
         self.__main_window.show()
 
     def __on_graph_rebuild_requested(self):
