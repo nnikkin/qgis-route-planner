@@ -3,6 +3,8 @@ from typing import Any
 
 import requests
 
+from qgis_route_planner.exceptions import WeatherServiceError
+
 
 class WeatherService:
     def __init__(self, api_key: str = "", api_url: str | None = None):
@@ -52,18 +54,36 @@ class WeatherService:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as http_err:
-            print(f"HTTP ошибка: {http_err}")
+            raise WeatherServiceError(f"Ошибка: {http_err}") from http_err
         except requests.exceptions.ConnectionError as conn_err:
-            print(f"Ошибка соединения с сервисом погоды: {conn_err}")
+            raise WeatherServiceError("Не удалось подключиться к сервису погоды.") from conn_err
         except requests.exceptions.Timeout as timeout_err:
-            print(f"Истекло время ожидания сервиса погоды: {timeout_err}")
+            raise WeatherServiceError("Истекло время ожидания сервиса погоды.") from timeout_err
         except Exception as err:
-            print(f"Произошла ошибка во время получения данных из сервиса погоды: {err}")
-        return None
+            raise WeatherServiceError(f"Произошла ошибка во время получения данных из сервиса погоды: {err}") from err
 
     def calculate_weather(self) -> dict | None:
         """ Получить погодные данные для текущих координат сервиса. """
         return self.get_weather_data()
+
+    def get_season_speed(
+            self,
+            summer_kmh: float,
+            winter_kmh: float,
+            fallback: str = "summer",
+    ) -> float:
+        data = self.get_weather_data()
+        if data is None:
+            return summer_kmh if fallback == "summer" else winter_kmh
+
+        temp = data.get("main", {}).get("temp")
+        weather_ids = [w.get("id", 0) for w in data.get("weather", [])]
+        # снег, метель, ледяной дождь
+        is_winter_conditions = ((temp is not None and temp < 2) or
+                                any(200 <= wid < 700 and wid not in range(500, 505) for wid in weather_ids) or
+                                any(600 <= wid < 700 for wid in weather_ids))
+
+        return winter_kmh if is_winter_conditions else summer_kmh
 
     def test_connection(
             self,
@@ -72,8 +92,3 @@ class WeatherService:
     ) -> bool:
         """ Проверить доступность сервиса и корректность API-ключа. """
         return self.get_weather_data(lon=lon, lat=lat) is not None
-
-
-if __name__ == "__main__":
-    w = WeatherService()
-    print(w.get_weather_data(lat="59.13", lon="39.54", key="973e67cbeadac6d9942d3282f8ac96a2"))

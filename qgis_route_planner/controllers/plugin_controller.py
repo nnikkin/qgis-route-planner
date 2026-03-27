@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import copy
+
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.core import QgsTask, QgsApplication
 
+from ..exceptions import RoutingPluginError
 from ..repositories import (
     RoadGraphRepository,
     LayerRepository,
@@ -18,7 +21,7 @@ from ..services import (
     RestrictionService,
     WeatherService
 )
-from ..data.models import (
+from qgis_route_planner.models import (
     DbConfigModel,
     LayerConfigModel,
     ColumnsConfigModel,
@@ -32,6 +35,7 @@ from .init_dialogs_controller import InitDialogsController
 from .main_window_controller import MainWindowController
 from .settings_dialog_controller import SettingsDialogController
 from .restriction_dialog_controller import RestrictionDialogController
+from qgis_route_planner.logger import Logger
 
 from ..views import (
     PluginMainWindow,
@@ -106,10 +110,13 @@ class PluginController(BaseController):
         self.__old_layers_config_model: LayerConfigModel | None = None
         self.__old_cols_config_model: ColumnsConfigModel | None = None
         self.__old_restriction_model: RestrictionModel | None = None
+        self.__is_reconnecting = False
+        self.__reconnect_snapshot: dict[str, object] | None = None
 
         self.__connect()
 
     def first_start_initialize(self):
+        Logger.info("Начата инициализация плагина")
         self.__db_config_dialog.open()
 
     def open_main_window(self):
@@ -196,6 +203,10 @@ class PluginController(BaseController):
 
     def __db_con_test(self):
         try:
+            Logger.info("Идёт проверка соединения с базой данных...")
+            if self.__init_dialogs_controller is None:
+                self.__restore_init_dialogs_controller()
+
             self.__db_connection = DbConnection(
                 host=self.__db_config_model.host,
                 port=self.__db_config_model.port,
@@ -205,12 +216,15 @@ class PluginController(BaseController):
                 schema=self.__db_config_model.schema,
             )
             if self.__db_connection.test_connection():
+                Logger.info("Проверка соединения пройдена!")
                 self.__init_repositories()
                 self.__init_services()
                 self.__init_dialogs_controller.set_service(self.__spatial_data_service)
+        except RoutingPluginError as e:
+            QMessageBox.critical(None, "Ошибка", str(e), QMessageBox.Ok)
         except Exception as e:
-            QMessageBox.critical(None, "Ошибка",
-                f"Не удалось завершить инициализацию плагина:\n{e}", QMessageBox.Ok)
+            Logger.error(e)
+            QMessageBox.critical(None, "Ошибка", "Не удалось подключиться к базе данных", QMessageBox.Ok)
 
     def __db_con_created(self):
         try:
@@ -226,8 +240,8 @@ class PluginController(BaseController):
                 self.__main_window.close()
                 self.__settings_dialog.close()
 
+            self.__reset_init_selection()
             self.__init_everything()
-            self.__settings_service.save_db_params(self.__db_connection)
             self.__layer_select_dialog.open()
         except Exception as e:
             QMessageBox.critical(None, "Ошибка",
@@ -267,6 +281,7 @@ class PluginController(BaseController):
         selected_layers = list(self.__selected_layers)
         column_mapping = dict(self.__column_mapping)
 
+        Logger.info("Запускается процесс создания графа")
         try:
             def run_in_background(task: QgsTask):
                 task.setProgress(0)
@@ -277,7 +292,10 @@ class PluginController(BaseController):
             def on_finished(exception, result=None):
                 if exception:
                     QMessageBox.critical(None, "Ошибка",
-                        f"Не удалось инициализировать БД:\n{exception}", QMessageBox.Ok)
+                                         f"Не удалось инициализировать БД:\n{exception}", QMessageBox.Ok)
+                    Logger.error(f"Не удалось инициализировать БД:\n{exception}")
+                    if self.__is_reconnecting:
+                        self.__reconnect_cancelled()
                     return
                 self.__on_topology_build_finished()
 
@@ -290,20 +308,31 @@ class PluginController(BaseController):
         except Exception as e:
             QMessageBox.critical(None, "Ошибка",
                 f"Не удалось построить граф:\n{e}\nПлагин завершает работу.", QMessageBox.Ok)
+            Logger.error(f"Не удалось построить граф:\n{e}\nПлагин завершает работу.")
             self.crit_plugin_error.emit()
 
     def __on_topology_build_finished(self):
+        Logger.info("Граф успешно создан!")
+        if self.__settings_service and self.__db_connection:
+            self.__settings_service.save_db_params(self.__db_connection)
+        self.__finish_reconnect()
         self.plugin_initialized.emit()
         self.__initialize_map()
+        Logger.info("Инициализация плагина завершена!")
 
     def __on_topology_rebuild_finished(self):
         self.__initialize_map()
         self.__settings_dialog.close()
+        Logger.info("Граф перестроен!")
 
     def __initialization_cancelled(self):
+        if self.__is_reconnecting:
+            self.__reconnect_cancelled()
+            Logger.warning("Пользователь отменил процесс инициализации")
+            return
+
         if self.__main_window_controller:
             self.__main_window.close()
-        self.__init_dialogs_controller = None
         self.plugin_init_cancelled.emit()
 
     def __initialize_map(self):
@@ -324,7 +353,8 @@ class PluginController(BaseController):
             def on_finished(exception, result=None):
                 if exception:
                     QMessageBox.critical(None, "Ошибка",
-                        f"Не удалось инициализировать БД:\n{exception}", QMessageBox.Ok)
+                                         f"Не удалось инициализировать БД:\n{exception}", QMessageBox.Ok)
+                    Logger.error(f"Не удалось инициализировать БД:\n{exception}")
                     return
                 self.__on_topology_rebuild_finished()
 
@@ -336,33 +366,115 @@ class PluginController(BaseController):
             QgsApplication.taskManager().addTask(self.__rebuild_task)
         except Exception as e:
             QMessageBox.critical(None, "Ошибка",
-                f"Не удалось перестроить граф:\n{e}", QMessageBox.Ok)
+                                 f"Не удалось перестроить граф:\n{e}", QMessageBox.Ok)
+            Logger.error(f"Не удалось перестроить граф:\n{e}")
 
     def __on_reconnect_requested(self):
-        self.__old_db_connection = self.__db_connection
-        self.__old_db_config_model = self.__db_config_model
-        self.__old_layers_config_model = self.__layers_config_model
-        self.__old_cols_config_model = self.__cols_config_model
-        self.__old_restriction_model = self.__restriction_model
+        self.__is_reconnecting = True
+        self.__capture_reconnect_snapshot()
         try:
             self.__db_config_dialog.open()
         except Exception as e:
             QMessageBox.critical(None, "Ошибка",
-                f"Во время переподключения произошла ошибка:\n{e}", QMessageBox.Ok)
+                                 f"Во время переподключения произошла ошибка:\n{e}", QMessageBox.Ok)
+            Logger.error(f"Во время переподключения произошла ошибка:\n{e}")
             self.__reconnect_cancelled()
 
     def __reconnect_cancelled(self):
-        self.__db_connection = self.__old_db_connection
-        self.__db_config_model = self.__old_db_config_model
-        self.__layers_config_model = self.__old_layers_config_model
-        self.__cols_config_model = self.__old_cols_config_model
-        self.__restriction_model = self.__old_restriction_model
-        self.__old_db_connection = None
-        self.__old_db_config_model = None
-        self.__old_layers_config_model = None
-        self.__old_cols_config_model = None
-        self.__old_restriction_model = None
+        snapshot = self.__reconnect_snapshot
+        if not snapshot:
+            Logger.warning("Пользователь отменил переподключение к БД!")
+            self.__finish_reconnect()
+            return
+
+        for dialog in (self.__db_config_dialog, self.__layer_select_dialog, self.__cols_config_dialog):
+            if dialog and dialog.isVisible():
+                dialog.hide()
+
+        current_main_window = self.__main_window
+        current_settings_dialog = self.__settings_dialog
+
+        self.__db_connection = snapshot["db_connection"]
+        self.__settings_service = snapshot["settings_service"]
+        self.__spatial_data_service = snapshot["spatial_data_service"]
+        self.__routing_service = snapshot["routing_service"]
+        self.__restriction_service = snapshot["restriction_service"]
+        self.__weather_service = snapshot["weather_service"]
+        self.__vehicle_repo = snapshot["vehicle_repo"]
+        self.__layer_repo = snapshot["layer_repo"]
+        self.__graph_repo = snapshot["graph_repo"]
+        self.__restriction_repo = snapshot["restriction_repo"]
+        self.__main_window_controller = snapshot["main_window_controller"]
+        self.__settings_controller = snapshot["settings_controller"]
+        self.__restriction_controller = snapshot["restriction_controller"]
+        self.__main_window = snapshot["main_window"]
+        self.__settings_dialog = snapshot["settings_dialog"]
+        self.__restriction_dialog = snapshot["restriction_dialog"]
+        self.__selected_layers = snapshot["selected_layers"]
+        self.__column_mapping = snapshot["column_mapping"]
+        self.__layers_config_model.selected_layers = copy.deepcopy(snapshot["layer_model_selection"])
+        self.__cols_config_model.mappings = copy.deepcopy(snapshot["columns_mappings"])
+
+        if current_main_window and current_main_window is not self.__main_window:
+            current_main_window.close()
+        if current_settings_dialog and current_settings_dialog is not self.__settings_dialog:
+            current_settings_dialog.close()
+
+        if self.__init_dialogs_controller is not None:
+            self.__init_dialogs_controller.set_service(self.__spatial_data_service)
+        if self.__settings_service and self.__db_connection:
+            self.__settings_service.save_db_params(self.__db_connection)
+        if self.__main_window:
+            self.__main_window.show()
+
+        self.__finish_reconnect()
+
+    def __capture_reconnect_snapshot(self):
+        if self.__reconnect_snapshot is not None:
+            return
+        self.__reconnect_snapshot = {
+            "db_connection": self.__db_connection,
+            "settings_service": self.__settings_service,
+            "spatial_data_service": self.__spatial_data_service,
+            "routing_service": self.__routing_service,
+            "restriction_service": self.__restriction_service,
+            "weather_service": self.__weather_service,
+            "vehicle_repo": self.__vehicle_repo,
+            "layer_repo": self.__layer_repo,
+            "graph_repo": self.__graph_repo,
+            "restriction_repo": self.__restriction_repo,
+            "main_window_controller": self.__main_window_controller,
+            "settings_controller": self.__settings_controller,
+            "restriction_controller": self.__restriction_controller,
+            "main_window": self.__main_window,
+            "settings_dialog": self.__settings_dialog,
+            "restriction_dialog": self.__restriction_dialog,
+            "selected_layers": self.__selected_layers,
+            "column_mapping": self.__column_mapping,
+            "layer_model_selection": copy.deepcopy(self.__layers_config_model.selected_layers),
+            "columns_mappings": copy.deepcopy(self.__cols_config_model.mappings),
+        }
+
+    def __finish_reconnect(self):
+        self.__is_reconnecting = False
+        self.__reconnect_snapshot = None
+        Logger.info(f"Процесс переподключения к БД завершён")
+
+    def __reset_init_selection(self):
+        self.__layers_config_model.clear()
+        self.__cols_config_model.clear()
+        self.__selected_layers = []
+        self.__column_mapping = {}
+
+    def __restore_init_dialogs_controller(self):
+        self.__init_dialogs_controller = InitDialogsController(
+            db_config_model=self.__db_config_model,
+            layer_config_model=self.__layers_config_model,
+            columns_config_model=self.__cols_config_model
+        )
+        self.__connect()
 
     def unload(self):
         if self.__main_window_controller is not None:
             self.__main_window_controller.on_clear_everything()
+            Logger.info("Плагин выгружается")

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from qgis.core import QgsPointXY
-from . import PointType
+from qgis_route_planner.data.route import PointType
 
 
 @dataclass

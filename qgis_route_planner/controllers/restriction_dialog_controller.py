@@ -1,16 +1,19 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
+from ..exceptions import RoutingPluginError
+from ..logger import Logger
+
 if TYPE_CHECKING:
     from ..services import RestrictionService
-    from ..data.models import RestrictionModel
+    from qgis_route_planner.models import RestrictionModel
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject, QDateTime
 from qgis.core import QgsPointXY
 
-from ..data.models import RestrictionType
-from ..data.route import RestrictionRecord
-from ..utils import FormMode
+from qgis_route_planner.models import RestrictionType
+from ..data import RestrictionRecord
+from ..enums import FormMode
 
 
 class RestrictionDialogController(QObject):
@@ -83,8 +86,11 @@ class RestrictionDialogController(QObject):
             restrictions = self.__service.get_all_restrictions()
             restriction_records = [RestrictionRecord.dict_to_record(r) for r in restrictions]
             self.__model.restrictions = restriction_records
+        except RoutingPluginError as e:
+            self.show_error.emit(str(e))
         except Exception as e:
-            self.show_error.emit(f"Ошибка загрузки ограничений: {e}")
+            Logger.error(e)
+            self.show_error.emit("Не удалось загрузить ограничения")
 
     def on_restriction_selected(self, restriction_id: int | None):
         """ Обработчик выбора ограничения в списке """
@@ -135,17 +141,15 @@ class RestrictionDialogController(QObject):
             return
 
         rt = self.__model.restriction_type
-        value_text = RestrictionRecord.value_text_for_type(
-            rt,
-            dimension_values={
-                "height": self.__model.max_height,
-                "width": self.__model.max_width,
-                "weight": self.__model.max_weight,
-            },
-            temporary_dates={
-                "from": self.__date_to_storage_text(self.__model.valid_from),
-                "to": self.__date_to_storage_text(self.__model.valid_to),
-            },
+        type_name = getattr(rt, "name", str(rt))
+        max_height_m = self.__model.max_height if type_name == "DIMENSION" else None
+        max_width_m = self.__model.max_width if type_name == "DIMENSION" else None
+        max_weight_t = self.__model.max_weight if type_name == "DIMENSION" else None
+        valid_from = self.__date_to_storage_text(self.__model.valid_from) if type_name == "TEMPORARY" else None
+        valid_to = self.__date_to_storage_text(self.__model.valid_to) if type_name == "TEMPORARY" else None
+        value_num = next(
+            (value for value in (max_height_m, max_width_m, max_weight_t) if value and value > 0),
+            None,
         )
 
         try:
@@ -157,9 +161,14 @@ class RestrictionDialogController(QObject):
                     restriction_type_id=RestrictionRecord.type_to_id(rt),
                     name=name,
                     node_id=node_id,
-                    value_num=None,
-                    value_text=value_text,
+                    value_num=value_num,
+                    value_text="",
                     comment=self.__model.comment.strip(),
+                    max_height_m=max_height_m,
+                    max_width_m=max_width_m,
+                    max_weight_t=max_weight_t,
+                    valid_from=valid_from,
+                    valid_to=valid_to,
                 )
 
                 if editing_mode == FormMode.EDIT and current_id is not None:

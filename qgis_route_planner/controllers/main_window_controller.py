@@ -1,16 +1,18 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
+from qgis_route_planner.logger import Logger
+from ..exceptions import DataImportError
+
 if TYPE_CHECKING:
-    from ..data.models.main_window_model import MainWindowModel
-    from ..data.models.restriction_model import RestrictionModel
+    from qgis_route_planner.models import MainWindowModel
+    from qgis_route_planner.models import RestrictionModel
     from .settings_dialog_controller import SettingsDialogController
     from .restriction_dialog_controller import RestrictionDialogController
     from ..services import SpatialDataService, RoutingService, RestrictionService
 
-from ..data.route import SelectedPointCollection, PointType
+from ..data import SelectedPointCollection, PointType
 
-from qgis.PyQt import Qt
 from qgis.PyQt.QtGui import QImage, QPainter
 from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal, QSize
 from qgis.core import QgsPointXY, QgsMapSettings, QgsMapRendererCustomPainterJob, QgsGeometry
@@ -67,6 +69,10 @@ class MainWindowController(BaseController):
         self.__current_route: SelectedPointCollection = SelectedPointCollection()
 
         self.__restriction_points: dict[int, tuple[float, float]] = {}
+        self.__map_canvas = None
+
+    def set_map_canvas(self, canvas):
+        self.__map_canvas = canvas
 
     def open_settings_dialog(self, tab_index: int = 0):
         self.__settings_controller.open_dialog_tab(tab_index)
@@ -80,22 +86,22 @@ class MainWindowController(BaseController):
         if visible:
             self.__restr_controller.refresh_restrictions()
             self.__update_visible_restrictions()
+            Logger.info("Ограничения отображаются на карте")
         else:
+            Logger.info("Ограничения скрыты с карты")
             self.restrictions_display_cleared.emit()
 
     def initialize_map(self, schema: str = "routing", selected_layers: list | None = None):
-        try:
-            layers = self.__data_service.get_spatial_layers(schema=schema)
-            if selected_layers:
-                layers.extend(self.__data_service.get_selected_spatial_layers(selected_layers))
-            if not layers:
-                raise BaseException(f"В схеме '{schema}' не обнаружены таблицы с геоданными!")
-            self.layers_obtained.emit(layers)
-        except Exception as e:
-            raise BaseException(f"Не удалось получить слои: {e}")
+        layers = self.__data_service.get_spatial_layers(schema=schema)
+        if selected_layers:
+            layers.extend(self.__data_service.get_selected_spatial_layers(selected_layers))
+        if not layers:
+            raise DataImportError(f"В схеме '{schema}' не обнаружены таблицы с геоданными")
+        self.layers_obtained.emit(layers)
 
     @pyqtSlot(QgsPointXY)
     def on_map_point_selected(self, point: QgsPointXY):
+        self.__routing_service.set_point_select_distance(self.__settings_controller.get_select_point_distance())
         snapped = self.__routing_service.snap_point_to_road(point)
         if not snapped:
             self.__model.status_message = "error:snap"
@@ -115,14 +121,12 @@ class MainWindowController(BaseController):
             snap_info = {"node_id": snap_info}
 
         node_id = snap_info.get("node_id")
-        edge_id = snap_info.get("edge_id")
-        fraction = snap_info.get("fraction")
 
-        if edge_id is None and node_id is None:
+        if node_id is None:
             self.__model.status_message = "error:no_node"
             return
 
-        self.__current_route.add_point(qgs_point_xy, point_type, node_id, edge_id, fraction)
+        self.__current_route.add_point(qgs_point_xy, point_type, node_id)
         route_point = self.__current_route.get_point(self.__current_route.next_point_id - 1)
 
         self.__model.points = list(self.__current_route.points)
@@ -145,23 +149,27 @@ class MainWindowController(BaseController):
         routes = self.__model.routes
         if route_index < 0 or route_index >= len(routes):
             return
-        self.__save_route_to_file(routes[route_index])
+        try:
+            saved_path = self.__save_route_to_file(routes[route_index])
+            if saved_path:
+                self.__model.status_message = f"Маршрут сохранён: {saved_path}"
+        except Exception as e:
+            self.__model.status_message = f"Ошибка сохранения маршрута: {e}"
 
     def __save_route_to_file(self, route: list[dict]):
         """ Формирование HTML-файла с выбранным маршрутом """
-        # TODO: сформировать файл с картинкой
         from qgis.PyQt.QtWidgets import QFileDialog
+        import base64
 
-        file_url, _ = QFileDialog.getSaveFileUrl(
+        file_path, _ = QFileDialog.getSaveFileName(
             None,
             "Выберите место для сохранения файла",
             "",
             "HTML-файл (*.html)",
         )
-        if not file_url or file_url.isEmpty():
+        if not file_path:
             return
 
-        file_path = file_url.toLocalFile()
         if not file_path.endswith(".html"):
             file_path += ".html"
 
@@ -175,7 +183,7 @@ class MainWindowController(BaseController):
             elif i == len(route) - 1:
                 action = "Финиш"
             else:
-                action = "Продолжать движение"
+                action = "Продолжайте движение"
             name = edge.get("name") or ""
             dist = edge.get("length_m", 0)
             rows += f"""
@@ -186,39 +194,69 @@ class MainWindowController(BaseController):
                 <td>{dist:.0f} м</td>
             </tr>"""
 
+        # Экспорт карты в base64
+        map_b64 = ""
         image = self.__export_route_image(route)
+        if image and not image.isNull():
+            from qgis.PyQt.QtCore import QBuffer, QByteArray, QIODevice
+            byte_array = QByteArray()
+            buffer = QBuffer(byte_array)
+            buffer.open(QIODevice.WriteOnly)
+            image.save(buffer, "PNG")
+            map_b64 = base64.b64encode(byte_array.data()).decode("utf-8")
 
-        html = f"""
-        <!DOCTYPE html>
-        <html lang="ru">
-            <head>
-                <meta charset="UTF-8">
-                <title>Маршрут</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                    h2 {{ color: #333; }}
-                    table {{ border-collapse: collapse; width: 100%; }}
-                    th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
-                    th {{ background: #f0f0f0; }}
-                    .summary {{ margin-bottom: 16px; }}
-                </style>
-            </head>
-            <body>
-                <h2>Маршрут</h2>
-                <div class="summary">
-                    <b>Длина:</b> {total_distance:.2f} км &nbsp;|&nbsp;
-                    <b>Время:</b> {total_time:.0f} мин
-                </div>
+        map_html = (
+            f'<img src="data:image/png;base64,{map_b64}" style="width:100%;height:100%;object-fit:contain;" alt="Карта маршрута">'
+            if map_b64 else
+            '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888;">Карта недоступна</div>'
+        )
+
+        html = f"""<!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <title>Маршрут</title>
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{ font-family: Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; }}
+            header {{ padding: 12px 20px; background: #f0f0f0; border-bottom: 1px solid #ccc; flex-shrink: 0; }}
+            header h2 {{ font-size: 16px; margin-bottom: 4px; }}
+            header .summary {{ font-size: 13px; color: #555; }}
+            .content {{ display: flex; flex: 1; overflow: hidden; }}
+            .map-panel {{ flex: 1; overflow: hidden; background: #e8e8e8; }}
+            .table-panel {{ width: 420px; flex-shrink: 0; overflow-y: auto; border-left: 1px solid #ccc; }}
+            table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
+            th {{ background: #f0f0f0; border: 1px solid #ccc; padding: 7px 8px; text-align: left; position: sticky; top: 0; }}
+            td {{ border: 1px solid #ddd; padding: 6px 8px; vertical-align: top; }}
+            tr:nth-child(even) td {{ background: #fafafa; }}
+        </style>
+    </head>
+    <body>
+        <header>
+            <h2>Маршрут</h2>
+            <span class="summary">
+                <b>Длина:</b> {total_distance:.2f} км &nbsp;|&nbsp;
+                <b>Время:</b> {total_time:.0f} мин
+            </span>
+        </header>
+        <div class="content">
+            <div class="map-panel">{map_html}</div>
+            <div class="table-panel">
                 <table>
-                    <thead><tr><th>#</th><th>Действие</th><th></th><th>Расстояние</th></tr></thead>
+                    <thead>
+                        <tr><th>#</th><th>Действие</th><th>Улица</th><th>Расстояние</th></tr>
+                    </thead>
                     <tbody>{rows}</tbody>
                 </table>
-            </body>
-        </html>
-        """
+            </div>
+        </div>
+    </body>
+    </html>"""
 
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(html)
+        Logger.info(f"Файл сохранён: {file_path}")
+        return file_path
 
     def __export_route_image(self, route: list[dict],
                            width: int = 1920, height: int = 1080) -> QImage:
@@ -226,20 +264,21 @@ class MainWindowController(BaseController):
         from qgis.PyQt.QtCore import QPointF
 
         extent = self.__get_route_extent(route)
-        if extent is None:
-            return
+        if extent is None or self.__map_canvas is None:
+            return None
 
         extent.grow(extent.width() * 0.1)
-        layers = self.mapView.layers()
+        layers = self.__map_canvas.layers()
 
         settings = QgsMapSettings()
         settings.setLayers(layers)
         settings.setExtent(extent)
         settings.setOutputSize(QSize(width, height))
-        settings.setBackgroundColor(Qt.white)
+        white = QColor("white")
+        settings.setBackgroundColor(white)
 
         image = QImage(QSize(width, height), QImage.Format_ARGB32)
-        image.fill(Qt.white)
+        image.fill(white)
 
         painter = QPainter(image)
 
@@ -290,7 +329,6 @@ class MainWindowController(BaseController):
             self.routes_display_requested.emit([])
             return
 
-        route_points = self.__current_route.get_route_points()
         point_ids = self.__current_route.get_point_ids()
         start_node_id = point_ids[0] if point_ids else None
         end_node_id = point_ids[-1] if point_ids else None
@@ -299,17 +337,24 @@ class MainWindowController(BaseController):
             self.__model.active_profile
         )
 
+        p1 = f"Запрошено построение маршрутов из точки {start_node_id} в точку {end_node_id}"
+        p2 = f" с промежуточными точками {waypoint_ids}" if waypoint_ids else ""
+
+        Logger.info(p1 + p2)
+
         routes = self.__routing_service.calculate_routes(
             start_node_id, end_node_id,
-            self.__model.active_profile, waypoint_ids, restriction_node_ids, route_points
+            self.__model.active_profile, waypoint_ids, restriction_node_ids, self.__current_route.points
         )
 
         if not routes:
+            Logger.info("Маршруты не найдены")
             self.__model.status_message = "error:no_routes"
             self.__model.routes = []
             self.routes_display_requested.emit([])
             return
 
+        Logger.info(f"Найдено маршрутов: {len(routes)}")
         self.__model.routes = routes
         self.__model.active_tab = 1
         self.routes_display_requested.emit(routes)
@@ -344,6 +389,7 @@ class MainWindowController(BaseController):
         return list(self.__restriction_points.keys())
 
     def snap_point(self, point: QgsPointXY):
+        self.__routing_service.set_point_select_distance(self.__settings_controller.get_select_point_distance())
         return self.__routing_service.snap_point_to_road(point)
 
     def __on_restrictions_changed(self, _restrictions: list):
