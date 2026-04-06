@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..controllers import InitDialogsController
-    from ..data.models import ColumnsConfigModel
-    from ..data.models.cols_config_model import ColumnInfo
+    from qgis_route_planner.models import ColumnsConfigModel
+    from qgis_route_planner.models import ColumnInfo
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
-from ..utils import ColumnRole
+from ..enums import ColumnRole
 
 
 class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -81,6 +81,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def showEvent(self, event, **kwargs):
         super().showEvent(event)
+        self.__step_finished = False
         self.__update_columns_table()
 
     def closeEvent(self, event, **kwargs):

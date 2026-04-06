@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ..repositories import DbConnection
 
 class LayerRepository:
@@ -40,7 +42,7 @@ class LayerRepository:
         """
         return self.__db.execute_query(query, table_name)
 
-    def get_layer_extent(self, table_name: str) -> tuple | tuple[int, int, int, int]:
+    def get_layer_extent(self, table_name: str) -> tuple:
         query = f"""
             SELECT ST_XMin(extent), ST_YMin(extent), 
                    ST_XMax(extent), ST_YMax(extent)

@@ -1,4 +1,8 @@
-from ..data.route import RestrictionRecord
+from __future__ import annotations
+
+import psycopg.errors
+
+from ..data import RestrictionRecord
 from ..repositories import DbConnection
 
 
@@ -7,6 +11,8 @@ class RestrictionRepository:
         self.__db = db
 
     def create_tables(self):
+        self.__db.execute_nonquery("CREATE SCHEMA IF NOT EXISTS routing")
+
         self.__db.execute_nonquery("""
             CREATE TABLE IF NOT EXISTS routing.restriction_types (
                 restriction_type_id SMALLINT PRIMARY KEY,
@@ -23,20 +29,28 @@ class RestrictionRepository:
                 node_id             BIGINT,
                 value_num           DOUBLE PRECISION,
                 value_text          TEXT,
-                comment             TEXT DEFAULT ''
+                comment             TEXT DEFAULT '',
+                max_height_m        DOUBLE PRECISION,
+                max_width_m         DOUBLE PRECISION,
+                max_weight_t        DOUBLE PRECISION,
+                valid_from          TIMESTAMP,
+                valid_to            TIMESTAMP
             )
         """)
 
         for col, definition in [
             ("name", "TEXT"),
             ("comment", "TEXT DEFAULT ''"),
+            ("max_height_m", "DOUBLE PRECISION"),
+            ("max_width_m", "DOUBLE PRECISION"),
+            ("max_weight_t", "DOUBLE PRECISION"),
+            ("valid_from", "TIMESTAMP"),
+            ("valid_to", "TIMESTAMP"),
         ]:
-            try:
-                self.__db.execute_nonquery(
-                    f"ALTER TABLE routing.restrictions ADD COLUMN IF NOT EXISTS {col} {definition}"
-                )
-            except Exception:
-                pass
+            self.__db.execute_nonquery(
+                f"ALTER TABLE routing.restrictions ADD COLUMN IF NOT EXISTS {col} {definition}"
+            )
+        self.__migrate_legacy_value_text()
 
     def ensure_default_types(self):
         self.create_tables()
@@ -50,15 +64,18 @@ class RestrictionRepository:
         for type_id, code, name in defaults:
             if type_id in existing:
                 continue
-            self.__db.execute_nonquery(
-                """
-                INSERT INTO routing.restriction_types
-                    (restriction_type_id, code, name)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (restriction_type_id) DO NOTHING
-                """,
-                type_id, code, name,
-            )
+            try:
+                self.__db.execute_nonquery(
+                    """
+                    INSERT INTO routing.restriction_types
+                        (restriction_type_id, code, name)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (restriction_type_id) DO NOTHING
+                    """,
+                    type_id, code, name,
+                )
+            except psycopg.errors.DuplicateColumn:
+                pass
 
     def __next_id(self) -> int:
         rows = self.__db.execute_query(
@@ -77,7 +94,12 @@ class RestrictionRepository:
                 r.node_id,
                 r.value_num,
                 r.value_text,
-                COALESCE(r.comment, '') AS comment
+                COALESCE(r.comment, '') AS comment,
+                r.max_height_m,
+                r.max_width_m,
+                r.max_weight_t,
+                r.valid_from,
+                r.valid_to
             FROM routing.restrictions r
             LEFT JOIN routing.restriction_types t
                 USING (restriction_type_id)
@@ -97,7 +119,12 @@ class RestrictionRepository:
                 r.node_id,
                 r.value_num,
                 r.value_text,
-                COALESCE(r.comment, '') AS comment
+                COALESCE(r.comment, '') AS comment,
+                r.max_height_m,
+                r.max_width_m,
+                r.max_weight_t,
+                r.valid_from,
+                r.valid_to
             FROM routing.restrictions r
             LEFT JOIN routing.restriction_types t
                 USING (restriction_type_id)
@@ -112,8 +139,9 @@ class RestrictionRepository:
             """
             INSERT INTO routing.restrictions
                 (restriction_id, restriction_type_id, name,
-                 node_id, value_num, value_text, comment)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                 node_id, value_num, value_text, comment,
+                 max_height_m, max_width_m, max_weight_t, valid_from, valid_to)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             self.__next_id(),
             restriction.restriction_type_id,
@@ -122,6 +150,11 @@ class RestrictionRepository:
             restriction.value_num,
             restriction.value_text,
             restriction.comment or "",
+            restriction.max_height_m,
+            restriction.max_width_m,
+            restriction.max_weight_t,
+            restriction.valid_from,
+            restriction.valid_to,
         )
 
     def upd_restriction(self, restriction_id: int, restriction: RestrictionRecord):
@@ -133,7 +166,12 @@ class RestrictionRepository:
                 node_id = %s,
                 value_num = %s,
                 value_text = %s,
-                comment = %s
+                comment = %s,
+                max_height_m = %s,
+                max_width_m = %s,
+                max_weight_t = %s,
+                valid_from = %s,
+                valid_to = %s
             WHERE restriction_id = %s
             """,
             restriction.restriction_type_id,
@@ -142,6 +180,11 @@ class RestrictionRepository:
             restriction.value_num,
             restriction.value_text,
             restriction.comment or "",
+            restriction.max_height_m,
+            restriction.max_width_m,
+            restriction.max_weight_t,
+            restriction.valid_from,
+            restriction.valid_to,
             restriction_id,
         )
 
@@ -172,4 +215,72 @@ class RestrictionRepository:
             "value_num": row[6],
             "value_text": row[7],
             "comment": row[8],
+            "max_height_m": row[9],
+            "max_width_m": row[10],
+            "max_weight_t": row[11],
+            "valid_from": row[12],
+            "valid_to": row[13],
         }
+
+    def __migrate_legacy_value_text(self):
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET
+                            max_height_m = COALESCE(
+                                max_height_m,
+                                NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
+                            ),
+                            max_width_m = COALESCE(
+                                max_width_m,
+                                NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
+                            ),
+                            max_weight_t = COALESCE(
+                                max_weight_t,
+                                NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
+                            ),
+                            value_num = COALESCE(
+                                value_num,
+                                NULLIF(NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
+                                NULLIF(NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
+                                NULLIF(NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0)
+                            )
+                        WHERE restriction_type_id = 2
+                          AND value_text IS NOT NULL
+                          AND value_text LIKE '%=%';
+                    """)
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET value_text = ''
+                        WHERE restriction_type_id = 2
+                          AND value_text IS NOT NULL
+                          AND value_text <> ''
+                          AND (
+                              max_height_m IS NOT NULL
+                              OR max_width_m IS NOT NULL
+                              OR max_weight_t IS NOT NULL
+                          );
+                    """)
+
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET
+                            valid_from = COALESCE(
+                                valid_from,
+                                NULLIF(substring(value_text from 'from=([^;]+)'), '')::timestamp
+                            ),
+                            valid_to = COALESCE(
+                                valid_to,
+                                NULLIF(substring(value_text from 'to=([^;]+)'), '')::timestamp
+                            )
+                        WHERE restriction_type_id = 3
+                          AND value_text IS NOT NULL
+                          AND value_text LIKE '%=%';
+                    """)
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET value_text = ''
+                        WHERE restriction_type_id = 3
+                          AND value_text IS NOT NULL
+                          AND value_text <> ''
+                          AND (valid_from IS NOT NULL OR valid_to IS NOT NULL);
+                    """)

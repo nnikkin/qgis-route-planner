@@ -10,7 +10,7 @@ from qgis.PyQt.QtGui import QRegExpValidator
 from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QMetaObject, QCoreApplication, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
-from ..data.models import DbConfigModel
+from qgis_route_planner.models import DbConfigModel
 
 class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     """ Диалоговое окно подключения к БД """
@@ -164,6 +164,10 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.check_con_button.setText(_translate("Dialog", "Проверить подключение"))
         self.label_2.setText(_translate("Dialog", "Схема:"))
         self.label_3.setText(_translate("Dialog", "База данных:"))
+
+    def showEvent(self, event, **kwargs):
+        super().showEvent(event)
+        self.__step_finished = False
 
     def closeEvent(self, event, **kwargs):
         if not self.__step_finished:

@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..controllers import InitDialogsController
-    from ..data.models import LayerConfigModel, Layer
+    from qgis_route_planner.models import LayerConfigModel, Layer
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
-from ..utils import GeometryType, LayerRole
+from ..enums import GeometryType, LayerRole
 
 
 class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -27,6 +27,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__controller: InitDialogsController = controller
 
         self.__available_layers: list = []
+        self.__step_finished = False
 
         self.__setupUi()
 
@@ -38,7 +39,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__model.layers_changed.connect(self.__update_layers_table)
 
-        self.__controller.layers_selected.connect(self.accept)
+        self.__controller.layers_selected.connect(self.__accept_step)
         self.__controller.layer_selection_failed.connect(self.__on_layer_selection_failed)
 
     def __setupUi(self):
@@ -140,23 +141,30 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
-        self.setWindowTitle(_translate("Dialog", "Шаг 2: выбор таблицы"))
-        self.label.setText(_translate("Dialog", "Выберите слои с геометрией LineString из базы данных для обработки."))
+        self.setWindowTitle(_translate("Dialog", "Шаг 2: выбор слоёв"))
+        self.label.setText(_translate("Dialog", "Выберите слои из базы данных для обработки."))
         self.pushItemToTableButton.setText(_translate("Dialog", ">>"))
         self.pushItemToListButton.setText(_translate("Dialog", "<<"))
         item = self.tableWidget.horizontalHeaderItem(0)
-        item.setText(_translate("Dialog", "Название таблицы"))
+        item.setText(_translate("Dialog", "Название"))
         item = self.tableWidget.horizontalHeaderItem(1)
         item.setText(_translate("Dialog", "Тип геометрии"))
         item = self.tableWidget.horizontalHeaderItem(2)
-        item.setText(_translate("Dialog", "Роль слоя"))
+        item.setText(_translate("Dialog", "Назначение слоя"))
 
     def showEvent(self, event, **kwargs):
         super().showEvent(event)
-        if not self.__available_layers:
-            self.__fill_list()
+        self.__step_finished = False
+        self.__available_layers = []
+        self.listWidget.clear()
+        self.__fill_list()
+        self.__update_layers_table(self.__model.selected_layers)
 
     def closeEvent(self, event, **kwargs):
+        if self.__step_finished:
+            event.accept()
+            return
+
         close_question = self._show_question(
             "Для продолжения требуется выбрать таблицу.\nВы уверены, что хотите закрыть мастер подключения?",
             "Внимание"
@@ -186,6 +194,10 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def __on_accept(self):
         self.__controller.layer_select_step_finish()
+
+    def __accept_step(self):
+        self.__step_finished = True
+        self.accept()
 
     @pyqtSlot(str)
     def __on_layer_selection_failed(self, message: str):

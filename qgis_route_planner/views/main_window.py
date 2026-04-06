@@ -2,8 +2,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from ..data import RoutePoint
     from ..controllers import MainWindowController
-    from ..data.models import MainWindowModel
+    from qgis_route_planner.models import MainWindowModel
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import pyqtSlot
@@ -13,13 +14,14 @@ from qgis.PyQt.QtCore import Qt
 
 from qgis.core import (
     QgsGeometry, QgsPointXY, QgsWkbTypes, QgsVectorLayer,
-    QgsPalLayerSettings, QgsVectorLayerSimpleLabeling
+    QgsPalLayerSettings, QgsVectorLayerSimpleLabeling,
+    QgsMarkerSymbol
 )
 from qgis.gui import (
     QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
 )
 
-from ..data.route import RoutePoint, PointType
+from ..data import PointType
 from .widgets.map_widget import MapWidget
 from .widgets.route_list_widget import RouteListWidget
 from .message_box_mixin import MessageBoxMixin
@@ -83,6 +85,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         # Карта
         self.mapView = MapWidget()
+        self.__controller.set_map_canvas(self.mapView)
         self.mapView.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding,
             QtWidgets.QSizePolicy.Expanding
@@ -407,9 +410,40 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(list)
     def __initialize_map(self, layers: list[QgsVectorLayer]):
-        """ Принимает слои от контроллера и устанавливает их на карту """
         self.mapView.set_layers(layers)
         for layer in layers:
+            if layer.geometryType() == QgsWkbTypes.LineGeometry:
+                from qgis.core import QgsSimpleLineSymbolLayer, QgsLineSymbol
+
+                source = layer.dataProvider().dataSourceUri()
+                is_routing = '"routing"' in source or 'table=routing.' in source
+
+                symbol = QgsLineSymbol()
+                symbol.deleteSymbolLayer(0)
+                line = QgsSimpleLineSymbolLayer()
+
+                if is_routing:
+                    line.setColor(Qt.black)  # граф
+                    line.setWidth(0.4)
+                else:
+                    line.setColor(Qt.gray)  # исходные данные
+                    line.setWidth(0.2)
+
+                symbol.appendSymbolLayer(line)
+                layer.renderer().setSymbol(symbol)
+
+            if layer.geometryType() == QgsWkbTypes.PointGeometry:
+                source = layer.dataProvider().dataSourceUri().lower()
+                layer_name = layer.name().lower()
+                is_graph_nodes = "graph_nodes" in layer_name or "graph_nodes" in source
+                symbol = QgsMarkerSymbol.createSimple({
+                    "name": "circle",
+                    "color": "190,70,70" if is_graph_nodes else "0,0,0",
+                    "outline_color": "70,35,35" if is_graph_nodes else "0,0,0",
+                    "size": "1.8" if is_graph_nodes else "0.5",
+                })
+                layer.renderer().setSymbol(symbol)
+
             if layer.fields().indexOf('name') >= 0:
                 settings = QgsPalLayerSettings()
                 settings.fieldName = 'name'
@@ -418,7 +452,8 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
                     settings.placement = QgsPalLayerSettings.Line
                 layer.setLabelsEnabled(True)
                 layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
-                layer.triggerRepaint()
+
+            layer.triggerRepaint()
         self.mapView.refresh()
 
     def __set_marker_color(self, marker: QgsVertexMarker, point_type: PointType):
