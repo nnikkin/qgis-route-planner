@@ -5,7 +5,7 @@ from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QApplication
 
-from qgis_route_planner.controllers import PluginController
+from qgis_route_planner.main.plugin_app import PluginApp
 
 
 class QgisRoutePlanner:
@@ -22,10 +22,10 @@ class QgisRoutePlanner:
         if app:
             app.setWindowIcon(QIcon(self.icon_path))
 
-        self.__controller: PluginController = PluginController()
-        self.__controller.plugin_initialized.connect(self.__on_initialized)
-        self.__controller.plugin_init_cancelled.connect(self.__on_init_cancelled)
-        self.__controller.crit_plugin_error.connect(self.unload)
+        self.__orchestrator: PluginApp = PluginApp()
+        self.__orchestrator.plugin_initialized.connect(self.__on_initialized)
+        self.__orchestrator.plugin_init_cancelled.connect(self.__on_init_cancelled)
+        self.__orchestrator.crit_plugin_error.connect(self.unload)
 
         from qgis.PyQt.QtCore import QLibraryInfo
         locale = QSettings().value("locale/userLocale", "ru")
@@ -91,14 +91,14 @@ class QgisRoutePlanner:
             self.iface.removePluginMenu(self.tr(u"&Поиск маршрутов"), action)
             self.iface.removeToolBarIcon(action)
 
-        self.__controller.unload()
+        self.__orchestrator.unload()
 
     def run(self):
         if self.first_start:
             self.first_start = False
-            self.__controller.first_start_initialize()
+            self.__orchestrator.first_start_initialize()
         else:
-            self.__controller.open_main_window()
+            self.__orchestrator.open_main_window()
 
     def __on_initialized(self):
         self.first_start = False
