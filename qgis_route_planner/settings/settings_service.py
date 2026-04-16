@@ -3,7 +3,7 @@ from __future__ import annotations
 from qgis.PyQt.QtCore import QSettings
 
 from qgis_route_planner.exceptions import RoutingPluginError
-from qgis_route_planner.database.db_connection import DbConnection
+from qgis_route_planner.core.db_connection import DbConnection
 
 
 class SettingsService:

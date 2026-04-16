@@ -1,11 +1,10 @@
 import os
-from qgis_route_planner import resources
 
 from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QApplication
 
-from qgis_route_planner.main.plugin_app import PluginApp
+from plugin_сoordinator import PluginCoordinator
 
 
 class QgisRoutePlanner:
@@ -22,7 +21,7 @@ class QgisRoutePlanner:
         if app:
             app.setWindowIcon(QIcon(self.icon_path))
 
-        self.__orchestrator: PluginApp = PluginApp()
+        self.__orchestrator: PluginCoordinator = PluginCoordinator()
         self.__orchestrator.plugin_initialized.connect(self.__on_initialized)
         self.__orchestrator.plugin_init_cancelled.connect(self.__on_init_cancelled)
         self.__orchestrator.crit_plugin_error.connect(self.unload)

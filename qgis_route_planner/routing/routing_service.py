@@ -1,14 +1,16 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from qgis_route_planner.vehicle import VehicleProfile
 
 from qgis.core import QgsPointXY
-
 from qgis.PyQt.QtWidgets import QMessageBox
 
-from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
 from qgis_route_planner.exceptions import WeatherServiceError, NodeNotFoundError
 
 from selected_point_collection import SelectedPointCollection
-from qgis_route_planner.setup.graph_repository import RoadGraphRepository
+from graph_provider import GraphProvider
 from weather_service import WeatherService
 
 
@@ -17,10 +19,10 @@ class RoutingService:
 
     def __init__(
             self,
-            graph_repo: RoadGraphRepository | None,
+            graph_provider: GraphProvider | None,
             weather_service: WeatherService | None = None,
     ):
-        self.__graph_repo: RoadGraphRepository = graph_repo
+        self.__graph_provider: GraphProvider = graph_provider
         self.__weather_service: WeatherService | None = weather_service
         self.__current_route: SelectedPointCollection = None
         self.__current_weather: dict | None = None
@@ -52,16 +54,16 @@ class RoutingService:
 
     def get_node_coordinates(self, node_id: int) -> tuple[float, float] | None:
         """ Возвращает координаты узла графа  """
-        if not self.__graph_repo:
+        if not self.__graph_provider:
             return None
-        return self.__graph_repo.get_node_coordinates(node_id)
+        return self.__graph_provider.get_node_coordinates(node_id)
 
     def snap_point_to_road(self, point: QgsPointXY) -> tuple[QgsPointXY, dict] | None:
         """ Привязывает точку к ближайшему ребру и возвращает точку и параметры привязки """
-        if not self.__graph_repo:
+        if not self.__graph_provider:
             return None
 
-        edge_info = self.__graph_repo.find_nearest_edge(point.x(), point.y(), self.__max_distance)
+        edge_info = self.__graph_provider.find_nearest_edge(point.x(), point.y(), self.__max_distance)
         if not edge_info:
             return None
 
@@ -71,7 +73,7 @@ class RoutingService:
             node_id = edge_info.get(node_key)
             if node_id is None:
                 continue
-            coords = self.__graph_repo.get_node_coordinates(node_id)
+            coords = self.__graph_provider.get_node_coordinates(node_id)
             if coords:
                 nearest_node_id = int(node_id)
                 break
@@ -93,7 +95,7 @@ class RoutingService:
             route_points: list = None
     ) -> list[list[dict]] | None:
 
-        if not self.__graph_repo:
+        if not self.__graph_provider:
             QMessageBox.critical(
                 None,
                 "",
@@ -121,7 +123,7 @@ class RoutingService:
             )
 
         try:
-            routes = self.__graph_repo.get_routes(
+            routes = self.__graph_provider.get_routes(
                 start_node_id, end_node_id, profile,
                 waypoints_ids, route_points, restriction_nodes,
                 route_speed_kmh=route_speed_kmh

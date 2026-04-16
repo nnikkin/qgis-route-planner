@@ -4,14 +4,14 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from qgis_route_planner.setup.init_dialogs_controller import InitDialogsController
+    from db_init_controller import DbInitController
 
 from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtGui import QRegExpValidator
 from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QMetaObject, QCoreApplication, pyqtSlot
 
-from qgis_route_planner.shared.message_box_mixin import MessageBoxMixin
-from qgis_route_planner.setup import DbConfigModel
+from qgis_route_planner.presentation import MessageBoxMixin
+from db_config_model import DbConfigModel
 
 class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     """ Диалоговое окно подключения к БД """
@@ -19,7 +19,7 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __init__(
             self,
             model: DbConfigModel,
-            controller: InitDialogsController,
+            controller: DbInitController,
             parent: QObject = None
     ):
         super().__init__(parent)

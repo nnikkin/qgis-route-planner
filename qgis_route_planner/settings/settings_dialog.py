@@ -4,13 +4,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from settings_dialog_controller import SettingsDialogController
     from settings_model import SettingsModel
-    from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
+    from profile_dto import ProfileDto
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
-from qgis_route_planner.shared.message_box_mixin import MessageBoxMixin
-from qgis_route_planner.shared.form_mode import FormMode
+from qgis_route_planner.presentation import MessageBoxMixin, FormMode
 from qgis_route_planner.vehicle.vehicle_type import VehicleType
 
 
@@ -515,7 +514,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__dbSchemaEdit.setText(db.schema)
 
     @pyqtSlot(list)
-    def __on_profiles_changed(self, profiles: list[VehicleProfile]):
+    def __on_profiles_changed(self, profiles: list[ProfileDto]):
         """ Обновить список профилей """
         self.__update_profiles_list(profiles, self.__model.active_profile_id)
 
@@ -551,7 +550,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__profilesListWidget.setEnabled(not is_editing)
 
     @pyqtSlot(object)
-    def __on_current_profile_data_changed(self, profile: VehicleProfile):
+    def __on_current_profile_data_changed(self, profile: ProfileDto):
         """ Обновить форму редактирования данными профиля """
         if profile is None:
             self.__clear_profile_form()
@@ -576,7 +575,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__distanceEdit.setValue(value)
 
     # Вспомогательные методы
-    def __update_profiles_list(self, profiles_list: list[VehicleProfile], active_id: int | None):
+    def __update_profiles_list(self, profiles_list: list[ProfileDto], active_id: int | None):
         """ Обновить список профилей в UI"""
         current_profile_id = self.__model.current_profile_id
         self.__profilesListWidget.blockSignals(True)
@@ -604,14 +603,14 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
                 self.__profilesListWidget.setCurrentItem(item)
                 break
 
-    def __set_profile_form(self, profile: VehicleProfile):
+    def __set_profile_form(self, profile: ProfileDto):
         """ Заполнить форму данными профиля """
         self.__profileNameEdit.setText(profile.name)
 
-        index = self.__vehicleTypeComboBox.findData(profile.type)
-        if index < 0 and isinstance(profile.type, str):
+        index = self.__vehicleTypeComboBox.findData(profile.type.name)
+        if index < 0:
             try:
-                index = self.__vehicleTypeComboBox.findData(VehicleType[profile.type])
+                index = self.__vehicleTypeComboBox.findData(VehicleType[profile.type.value])
             except KeyError:
                 index = -1
         if index >= 0:

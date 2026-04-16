@@ -3,8 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from psycopg.errors import Error as PsycopgError
 
-from qgis_route_planner.restrictions.restriction_type import RestrictionType
-from qgis_route_planner.restrictions.restriction_record import RestrictionRecord
+from qgis_route_planner.restrictions import RestrictionRecord, RestrictionType
 from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
 from qgis_route_planner.exceptions import DbConnectionError
 from qgis_route_planner.restrictions.restriction_repository import RestrictionRepository
@@ -17,6 +16,7 @@ class RestrictionService:
         self.__restriction_repo = restriction_repo
 
     def get_all_restrictions(self) -> list[dict]:
+        """ Получить все ограничения из БД """
         try:
             self.__restriction_repo.ensure_default_types()
             return self.__restriction_repo.get_all()
@@ -26,13 +26,14 @@ class RestrictionService:
                 operation="get_all_restrictions"
             ) from e
 
-    def get_restriction_by_id(self, restriction_id: int) -> dict | None:
+    def get_restriction_by_id(self, restr_id: int) -> dict | None:
+        """ Получить ограничение по ID """
         try:
             self.__restriction_repo.ensure_default_types()
-            return self.__restriction_repo.get_by_id(restriction_id)
+            return self.__restriction_repo.get_by_id(restr_id)
         except PsycopgError as e:
             raise DbConnectionError(
-                f"Не удалось получить список ограничение по ID {restriction_id}",
+                f"Не удалось получить список ограничение по ID {restr_id}",
                 operation="get_restriction_by_id"
             ) from e
 
@@ -41,7 +42,7 @@ class RestrictionService:
             profile: VehicleProfile | None,
             at_dt: datetime | None = None,
     ) -> list[int]:
-        """Вернуть node_id ограничений, актуальных для текущего расчёта."""
+        """ Вернуть node_id ограничений, актуальных для текущего расчёта """
         records = [
             RestrictionRecord.dict_to_record(row)
             for row in self.get_all_restrictions()
@@ -60,6 +61,7 @@ class RestrictionService:
         return list(dict.fromkeys(node_ids))
 
     def create_restriction(self, data: dict | RestrictionRecord) -> bool:
+        """ Создать ограничение """
         try:
             self.__restriction_repo.ensure_default_types()
             record = data if isinstance(data, RestrictionRecord) else self.__dict_to_record(data)
@@ -71,26 +73,28 @@ class RestrictionService:
                 operation="create_restriction"
             ) from e
 
-    def update_restriction(self, restriction_id: int, data: dict | RestrictionRecord) -> bool:
+    def update_restriction(self, restr_id: int, data: dict | RestrictionRecord) -> bool:
+        """ Обновить ограничение в БД """
         try:
             self.__restriction_repo.ensure_default_types()
             record = data if isinstance(data, RestrictionRecord) else self.__dict_to_record(data)
-            self.__restriction_repo.upd_restriction(restriction_id, record)
+            self.__restriction_repo.upd_restriction(restr_id, record)
             return True
         except PsycopgError as e:
             raise DbConnectionError(
-                f"Не удалось обновить ограничение с ID {restriction_id}",
+                f"Не удалось обновить ограничение с ID {restr_id}",
                 operation="update_restriction"
             ) from e
 
-    def delete_restriction(self, restriction_id: int) -> bool:
+    def delete_restriction(self, restr_id: int) -> bool:
+        """ Удалить ограничение """
         try:
             self.__restriction_repo.ensure_default_types()
-            self.__restriction_repo.del_restriction(restriction_id)
+            self.__restriction_repo.del_restriction(restr_id)
             return True
         except PsycopgError as e:
             raise DbConnectionError(
-                f"Не удалось удалить ограничение с ID {restriction_id}",
+                f"Не удалось удалить ограничение с ID {restr_id}",
                 operation="create_restriction"
             ) from e
 
@@ -100,17 +104,17 @@ class RestrictionService:
             profile: VehicleProfile | None,
             at_dt: datetime,
     ) -> bool:
-        restriction_type = RestrictionRecord.id_to_type(record.restriction_type_id)
-
-        if restriction_type == RestrictionType.SIMPLE:
+        """ Проверка, действует ли ограничение сейчас """
+        if record.restriction_type_id == RestrictionType.SIMPLE.value:
             return True
-        if restriction_type == RestrictionType.TEMPORARY:
+        if record.restriction_type_id == RestrictionType.TEMPORARY.value:
             return self.__is_temporary_restriction_active(record, at_dt)
-        if restriction_type == RestrictionType.DIMENSION:
+        if record.restriction_type_id == RestrictionType.DIMENSION.value:
             return self.__is_dimension_restriction_active(record, profile)
         return False
 
     def __is_temporary_restriction_active(self, record: RestrictionRecord, at_dt: datetime) -> bool:
+        """ Действует ли ограничение по времени """
         dates = record.temporary_dates()
         starts_at = self.__parse_storage_datetime(dates.get("from", ""))
         ends_at = self.__parse_storage_datetime(dates.get("to", ""))
@@ -126,6 +130,7 @@ class RestrictionService:
             record: RestrictionRecord,
             profile: VehicleProfile | None,
     ) -> bool:
+        """ Действует ли ограничение по габаритам """
         if profile is None:
             return False
 
@@ -144,8 +149,7 @@ class RestrictionService:
             return None
 
     def __is_edge_dimension_restriction(self, record: RestrictionRecord) -> bool:
-        restriction_type = RestrictionRecord.id_to_type(record.restriction_type_id)
-        if restriction_type != RestrictionType.DIMENSION:
+        if record.restriction_type_id != RestrictionType.DIMENSION.value:
             return False
         return (record.comment or "").startswith("auto:road_tags;edge_id=")
 

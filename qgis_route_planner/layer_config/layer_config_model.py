@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from qgis_route_planner.setup.layer_select.layer_role import LayerRole
+from layer_role import LayerRole
 
 
 from dataclasses import dataclass

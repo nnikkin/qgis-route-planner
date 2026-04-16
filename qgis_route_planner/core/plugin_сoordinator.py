@@ -6,20 +6,18 @@ from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.core import QgsTask, QgsApplication
 
+from qgis_route_planner.logger import Logger
 from qgis_route_planner.exceptions import RoutingPluginError
-from qgis_route_planner.shared import Logger
-from qgis_route_planner.database import DbConnection, RoadGraphRepository
+from qgis_route_planner.core.db_connection import DbConnection
 
-from main_window_model import MainWindowModel
-from qgis_route_planner.setup.layer_repository import LayerRepository
-from main_window_controller import MainWindowController
-from main_window import PluginMainWindow
+from qgis_route_planner.main import MainWindowModel, MainWindowController, MainWindow
+from qgis_route_planner.setup import RoadGraphRepository, LayerRepository
 
 from qgis_route_planner.setup import (
     DbConfigModel,
     LayerConfigModel,
     ColumnsConfigModel,
-    SpatialDataService,
+    TableService,
     InitDialogsController,
     LayersSelectDialog,
     LayerColumnsDialog,
@@ -42,7 +40,7 @@ from qgis_route_planner.routing import RoutingService, WeatherService
 from qgis_route_planner.vehicle import VehicleProfileRepository, VehicleService
 
 
-class PluginApp:
+class PluginCoordinator:
     """ Контроллер плагина """
 
     plugin_initialized = pyqtSignal()
@@ -87,14 +85,14 @@ class PluginApp:
             model=self.__cols_config_model,
             controller=self.__init_dialogs_controller,
         )
-        self.__main_window: PluginMainWindow | None = None
+        self.__main_window: MainWindow | None = None
         self.__restriction_dialog: RestrictionDialog | None = None
         self.__settings_dialog: SettingsDialog | None = None
 
         self.__db_connection: DbConnection | None = None
 
         self.__settings_service: SettingsService | None = None
-        self.__spatial_data_service: SpatialDataService | None = None
+        self.__spatial_data_service: TableService | None = None
         self.__routing_service: RoutingService | None = None
         self.__restriction_service: RestrictionService | None = None
         self.__weather_service: WeatherService | None = None
@@ -130,7 +128,7 @@ class PluginApp:
         self.__init_dialogs_controller.init_cancelled.connect(self.__initialization_cancelled)
 
     def __init_views(self):
-        self.__main_window = PluginMainWindow(
+        self.__main_window = MainWindow(
             model=self.__main_window_model,
             controller=self.__main_window_controller
         )
@@ -149,6 +147,7 @@ class PluginApp:
             self.__settings_model,
             self.__settings_service,
             self.__vehicle_service,
+            self.__weather_service
         )
         self.__settings_controller.reconnect_requested.connect(self.__on_reconnect_requested)
         self.__settings_controller.graph_rebuild_requested.connect(self.__on_graph_rebuild_requested)
@@ -176,13 +175,13 @@ class PluginApp:
     def __init_repositories(self):
         self.__vehicle_repo = VehicleProfileRepository()
         self.__layer_repo = LayerRepository(self.__db_connection)
-        self.__graph_repo = RoadGraphRepository(self.__db_connection, self.__layer_repo)
+        self.__graph_repo = RoadGraphRepository(self.__db_connection)
         self.__restriction_repo = RestrictionRepository(self.__db_connection)
 
     def __init_services(self):
         self.__settings_service = SettingsService()
         self.__vehicle_service = VehicleService(self.__vehicle_repo)
-        self.__spatial_data_service = SpatialDataService(
+        self.__spatial_data_service = TableService(
             self.__layer_repo,
             self.__graph_repo,
             self.__restriction_repo,

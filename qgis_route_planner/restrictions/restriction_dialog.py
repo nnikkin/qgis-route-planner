@@ -146,7 +146,7 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.restrictionTypeComboBox = QtWidgets.QComboBox(self.restrictionForm)
         self.restrictionTypeComboBox.setObjectName("restrictionTypeComboBox")
         for rt in RestrictionType:
-            self.restrictionTypeComboBox.addItem(rt.value, rt)
+            self.restrictionTypeComboBox.addItem(RestrictionType.get_as_str(rt), rt.value)
         self.restrictionTypeComboBox.setCurrentIndex(0)
         self.restrictionTypeComboBox.setEnabled(False)
         self.typeFormLayout.setWidget(
@@ -306,13 +306,13 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__set_type_page(rt)
         self.__controller.change_restriction_type_value(rt)
 
-    def __set_type_page(self, rt: RestrictionType):
+    def __set_type_page(self, restriction_type_id: int):
         page_map = {
-            RestrictionType.SIMPLE: 0,
-            RestrictionType.DIMENSION: 1,
-            RestrictionType.TEMPORARY: 2,
+            RestrictionType.SIMPLE.value: 0,
+            RestrictionType.DIMENSION.value: 1,
+            RestrictionType.TEMPORARY.value: 2,
         }
-        self.stackedWidget.setCurrentIndex(page_map.get(rt, 0))
+        self.stackedWidget.setCurrentIndex(page_map.get(restriction_type_id, 0))
 
     def __on_list_selection_changed(self):
         self.__controller.on_restriction_selected(self.get_selected_restriction_id())
@@ -342,12 +342,12 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
                 name = r.get("name", "—")
                 type_name = r.get(
                     "restriction_type_name",
-                    RestrictionRecord.id_to_type_name(r.get("restriction_type_id", 1))
+                    RestrictionType.get_as_str(r.get("restriction_type_id", 1))
                 )
             else:
                 restriction_id = r.id
                 name = r.name or "—"
-                type_name = RestrictionRecord.id_to_type_name(r.restriction_type_id)
+                type_name = RestrictionType.get_as_str(r.restriction_type_id)
             label = f"{name} [{type_name}]"
             item = QtWidgets.QListWidgetItem(label)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, restriction_id)
@@ -403,7 +403,7 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         if restriction_id is None:
             self.restrictionListWidget.clearSelection()
 
-    def __on_restriction_type_value_changed(self, value: RestrictionType):
+    def __on_restriction_type_value_changed(self, value: int):
         self.__set_combo_value(self.restrictionTypeComboBox, value)
         self.__set_type_page(value)
 

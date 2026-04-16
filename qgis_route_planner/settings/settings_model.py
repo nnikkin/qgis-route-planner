@@ -1,7 +1,7 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
-from qgis_route_planner.shared.form_mode import FormMode
+from profile_dto import ProfileDto
+from qgis_route_planner.presentation.form_mode import FormMode
 
 
 class SettingsModel(QObject):
@@ -28,11 +28,11 @@ class SettingsModel(QObject):
 
         self.__db_params = None
 
-        self.__profiles: list[VehicleProfile] = []
+        self.__profiles: list[ProfileDto] = []
         self.__active_profile_id: int = None
         self.__current_profile_id: int = None
         self.__editing_mode: FormMode = FormMode.EMPTY
-        self.__current_profile_data: VehicleProfile = None
+        self.__current_profile_data: ProfileDto = None
         self.__weather_settings: dict = {}
         self.__point_select_distance: float = 0.1
 
@@ -46,11 +46,11 @@ class SettingsModel(QObject):
         self.db_params_changed.emit(value)
 
     @property
-    def profiles(self) -> list[VehicleProfile]:
+    def profiles(self) -> list[ProfileDto]:
         return self.__profiles
 
     @profiles.setter
-    def profiles(self, profiles: list[VehicleProfile]):
+    def profiles(self, profiles: list[ProfileDto]):
         self.__profiles = profiles
         self.profiles_changed.emit(profiles)
 
@@ -82,11 +82,11 @@ class SettingsModel(QObject):
         self.editing_mode_changed.emit(value)
 
     @property
-    def current_profile_data(self) -> VehicleProfile:
+    def current_profile_data(self) -> ProfileDto:
         return self.__current_profile_data
 
     @current_profile_data.setter
-    def current_profile_data(self, value: VehicleProfile):
+    def current_profile_data(self, value: ProfileDto):
         self.__current_profile_data = value
         self.current_profile_data_changed.emit(value)
 

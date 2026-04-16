@@ -1,6 +1,7 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
-from qgis_route_planner.shared.form_mode import FormMode
-from qgis_route_planner.restrictions.restriction_record import RestrictionRecord
+from qgis_route_planner.presentation.form_mode import FormMode
+
+from qgis_route_planner.restrictions import RestrictionRecord, RestrictionType
 
 
 class RestrictionModel(QObject):
@@ -27,7 +28,7 @@ class RestrictionModel(QObject):
 
         self.__name = ""
         self.__comment = ""
-        self.__restriction_type = RestrictionType.SIMPLE
+        self.__restriction_type_id = RestrictionType.SIMPLE.value
         self.__point = None
 
         self.__valid_from = None
@@ -56,13 +57,13 @@ class RestrictionModel(QObject):
             signal.connect(self.__on_any_changed)
 
     @property
-    def restriction_type(self) -> RestrictionType:
-        return self.__restriction_type
+    def restriction_type_id(self) -> int:
+        return self.__restriction_type_id
 
-    @restriction_type.setter
-    def restriction_type(self, value: RestrictionType):
-        self.__restriction_type = value or RestrictionType.SIMPLE
-        self.restriction_type_changed.emit(self.__restriction_type)
+    @restriction_type_id.setter
+    def restriction_type_id(self, value: int | None):
+        self.__restriction_type_id = int(value or RestrictionType.SIMPLE.value)
+        self.restriction_type_changed.emit(self.__restriction_type_id)
 
     @property
     def name(self):
@@ -201,7 +202,7 @@ class RestrictionModel(QObject):
     def clear_form(self):
         self.name = ""
         self.comment = ""
-        self.restriction_type = RestrictionType.SIMPLE
+        self.restriction_type_id = RestrictionType.SIMPLE.value
         self.point = None
         self.valid_from = None
         self.valid_to = None
@@ -213,7 +214,7 @@ class RestrictionModel(QObject):
         self.current_restriction_data = record
         self.name = record.name
         self.comment = record.comment
-        self.restriction_type = RestrictionRecord.id_to_type(record.restriction_type_id)
+        self.restriction_type_id = record.restriction_type_id
         self.point = (None, record.node_id) if record.node_id is not None else None
         self.max_height = 0.0
         self.max_width = 0.0
@@ -221,12 +222,12 @@ class RestrictionModel(QObject):
         self.valid_from = None
         self.valid_to = None
 
-        if self.restriction_type == RestrictionType.DIMENSION:
+        if self.restriction_type_id == RestrictionType.DIMENSION.value:
             values = record.dimension_values()
             self.max_height = values["height"]
             self.max_width = values["width"]
             self.max_weight = values["weight"]
-        elif self.restriction_type == RestrictionType.TEMPORARY:
+        elif self.restriction_type_id == RestrictionType.TEMPORARY.value:
             dates = record.temporary_dates()
             self.valid_from = dates["from"]
             self.valid_to = dates["to"]

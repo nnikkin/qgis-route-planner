@@ -12,22 +12,17 @@ from qgis.PyQt.QtWidgets import QAction, QMenu
 from qgis.PyQt.QtGui import QCursor
 from qgis.PyQt.QtCore import Qt
 
-from qgis.core import (
-    QgsGeometry, QgsPointXY, QgsWkbTypes, QgsVectorLayer,
-    QgsPalLayerSettings, QgsVectorLayerSimpleLabeling,
-    QgsMarkerSymbol
-)
-from qgis.gui import (
-    QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
-)
+from qgis.core import QgsPointXY, QgsVectorLayer
+from qgis.gui import QgsMapToolPan, QgsMapToolZoom
 
 from qgis_route_planner.routing.point_type import PointType
+from map_canvas_manager import MapCanvasManager
 from map_widget import MapWidget
 from route_list_widget import RouteListWidget
-from qgis_route_planner.shared.message_box_mixin import MessageBoxMixin
+from qgis_route_planner.presentation.message_box_mixin import MessageBoxMixin
 
 
-class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
+class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
     """ Главное окно плагина """
 
     def __init__(self, model: MainWindowModel, controller: MainWindowController):
@@ -36,13 +31,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__model: MainWindowModel = model
         self.__controller: MainWindowController = controller
         self.__restriction_dialog = None
-
-        self.__point_markers: dict[int, QgsVertexMarker] = {}
-        self.__route_bands: list[list[QgsRubberBand]] = []
-
-        self.__restriction_markers: dict[int, QgsVertexMarker] = {}
-        self.__restriction_band = None
-        self.__visible_restriction_markers: dict[int, QgsVertexMarker] = {}
+        self.__map_manager: MapCanvasManager | None = None
 
         self.__setupUi()
 
@@ -85,6 +74,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         # Карта
         self.mapView = MapWidget()
+        self.__map_manager = MapCanvasManager(self.mapView)
         self.__controller.set_map_canvas(self.mapView)
         self.mapView.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding,
@@ -236,7 +226,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(int)
     def __on_active_route_changed(self, index: int):
-        self.__highlight_routes(index)
+        self.__map_manager.highlight_routes(index)
 
     @pyqtSlot(str)
     def __on_status_message_changed(self, message: str):
@@ -323,148 +313,31 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(object)
     def __add_point_marker(self, route_point: RoutePoint):
-        """ Добавить маркер на карту """
-        marker = QgsVertexMarker(self.mapView)
-        marker.setCenter(route_point.qgs_point_xy)
-        marker.setIconType(QgsVertexMarker.IconType.ICON_CIRCLE)
-        marker.setIconSize(10)
-        marker.setPenWidth(
-            3 if route_point.point_type in {PointType.START, PointType.END} else 2
-        )
-        self.__set_marker_color(marker, route_point.point_type)
-        marker.show()
-        self.__point_markers[route_point.id] = marker
+        self.__map_manager.add_point_marker(route_point)
 
     @pyqtSlot(int)
     def __remove_point_marker(self, point_id: int):
-        """ Убрать маркер с карты """
-        marker = self.__point_markers.pop(point_id, None)
-        if marker:
-            self.mapView.scene().removeItem(marker)
+        self.__map_manager.remove_point_marker(point_id)
 
     @pyqtSlot(int)
     def __update_point_marker_color(self, point_id: int):
-        """ Изменить цвет маркера """
-        marker = self.__point_markers.get(point_id)
-        if not marker:
-            return
         point = next((p for p in self.__model.points if p.id == point_id), None)
         if point:
-            self.__set_marker_color(marker, point.point_type)
+            self.__map_manager.update_point_marker_color(point_id, point.point_type)
 
     @pyqtSlot(list)
     def __display_routes(self, routes: list):
-        """ Метод для отображения маршрутов на карте """
-        self.__clear_route_bands()
-        if not routes:
-            return
-
-        extent = None
-        for route in routes:
-            band_list = []
-            for edge in route:
-                geom = QgsGeometry.fromWkt(edge["geom"])
-                if geom.isNull():
-                    continue
-                band = QgsRubberBand(self.mapView, QgsWkbTypes.LineGeometry)
-                band.setColor(Qt.gray)
-                band.setWidth(3)
-                band.setToGeometry(geom, None)
-                band_list.append(band)
-
-                bb = geom.boundingBox()
-                extent = bb if extent is None else (extent.combineExtentWith(bb) or extent)
-
-            self.__route_bands.append(band_list)
-
-        if extent:
-            self.mapView.setExtent(extent)
-
-        self.__highlight_routes(0)
-        self.mapView.refresh()
-
-    def __highlight_routes(self, active_index: int):
-        """ Подсветка маршрута """
-        for i, band_list in enumerate(self.__route_bands):
-            is_active = (i == active_index)
-            for band in band_list:
-                band.setColor(Qt.blue if is_active else Qt.darkGray)
-                band.setWidth(5 if is_active else 3)
-                band.setZValue(1 if is_active else 0)
-        self.mapView.refresh()
+        self.__map_manager.display_routes(routes)
 
     @pyqtSlot()
     def __clear_map_visuals(self):
-        for marker in self.__point_markers.values():
-            self.mapView.scene().removeItem(marker)
-        self.__point_markers.clear()
-        self.__clear_route_bands()
+        self.__map_manager.clear_map_visuals()
         self.points_list_widget.clear()
         self.route_list_widget.clear()
 
-    def __clear_route_bands(self):
-        for band_list in self.__route_bands:
-            for band in band_list:
-                self.mapView.scene().removeItem(band)
-        self.__route_bands = []
-
     @pyqtSlot(list)
     def __initialize_map(self, layers: list[QgsVectorLayer]):
-        self.mapView.set_layers(layers)
-        for layer in layers:
-            if layer.geometryType() == QgsWkbTypes.LineGeometry:
-                from qgis.core import QgsSimpleLineSymbolLayer, QgsLineSymbol
-
-                source = layer.dataProvider().dataSourceUri()
-                is_routing = '"routing"' in source or 'table=routing.' in source
-
-                symbol = QgsLineSymbol()
-                symbol.deleteSymbolLayer(0)
-                line = QgsSimpleLineSymbolLayer()
-
-                if is_routing:
-                    line.setColor(Qt.black)  # граф
-                    line.setWidth(0.4)
-                else:
-                    line.setColor(Qt.gray)  # исходные данные
-                    line.setWidth(0.2)
-
-                symbol.appendSymbolLayer(line)
-                layer.renderer().setSymbol(symbol)
-
-            if layer.geometryType() == QgsWkbTypes.PointGeometry:
-                source = layer.dataProvider().dataSourceUri().lower()
-                layer_name = layer.name().lower()
-                is_graph_nodes = "graph_nodes" in layer_name or "graph_nodes" in source
-                symbol = QgsMarkerSymbol.createSimple({
-                    "name": "circle",
-                    "color": "190,70,70" if is_graph_nodes else "0,0,0",
-                    "outline_color": "70,35,35" if is_graph_nodes else "0,0,0",
-                    "size": "1.8" if is_graph_nodes else "0.5",
-                })
-                layer.renderer().setSymbol(symbol)
-
-            if layer.fields().indexOf('name') >= 0:
-                settings = QgsPalLayerSettings()
-                settings.fieldName = 'name'
-                settings.enabled = True
-                if hasattr(QgsPalLayerSettings, "Line"):
-                    settings.placement = QgsPalLayerSettings.Line
-                layer.setLabelsEnabled(True)
-                layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
-
-            layer.triggerRepaint()
-        self.mapView.refresh()
-
-    def __set_marker_color(self, marker: QgsVertexMarker, point_type: PointType):
-        """ Установить цвет маркера """
-        colors = {
-            PointType.START: Qt.green,
-            PointType.END: Qt.magenta,
-            PointType.WAYPOINT: Qt.black,
-            PointType.RESTRICTION: Qt.red
-        }
-        marker.setColor(colors.get(point_type, Qt.black))
+        self.__map_manager.initialize_map(layers)
 
     def __get_route_info(self, route: list[dict]) -> dict:
         """ Получить информацию по маршруту """
@@ -492,59 +365,21 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
     def __deactivate_restriction_mode(self):
         """ Деактивировать режим выбора точек для ограничений """
         self.mapView.unsetMapTool(self.__select_restriction_point_tool)
-        self.__clear_restriction_markers()
+        self.__map_manager.clear_restriction_markers()
 
     def __cancel_restriction_selection(self):
         self.__deactivate_restriction_mode()
         self.__controller.cancel_add_restriction_point()
 
     def __add_restriction_point_marker(self, node_id: int, x: float, y: float):
-        """ Добавить маркер точки ограничения на карту """
-        marker = QgsVertexMarker(self.mapView)
-        marker.setCenter(QgsPointXY(x, y))
-        marker.setIconType(QgsVertexMarker.IconType.ICON_CROSS)
-        marker.setColor(Qt.red)
-        marker.setIconSize(12)
-        marker.setPenWidth(2)
-        marker.show()
-
-        if not self.__restriction_markers:
-            self.__restriction_markers = {}
-        self.__restriction_markers[node_id] = marker
-
-    def __clear_restriction_markers(self):
-        """ Очистить точку ограничения с карты """
-        if self.__restriction_markers:
-            for node_id, marker in list(self.__restriction_markers.items()):
-                self.mapView.scene().removeItem(marker)
-            self.__restriction_markers.clear()
+        self.__map_manager.add_restriction_point_marker(node_id, x, y)
 
     @pyqtSlot(list)
     def __display_visible_restrictions(self, restrictions: list[dict]):
-        self.__clear_visible_restriction_markers()
-        for restriction in restrictions:
-            marker_id = restriction.get("id") or restriction.get("node_id")
-            if marker_id is None:
-                continue
-
-            marker = QgsVertexMarker(self.mapView)
-            marker.setCenter(QgsPointXY(restriction["x"], restriction["y"]))
-            marker.setIconType(QgsVertexMarker.IconType.ICON_CROSS)
-            marker.setColor(
-                Qt.darkMagenta if restriction.get("selected") else Qt.red
-            )
-            marker.setIconSize(14 if restriction.get("selected") else 10)
-            marker.setPenWidth(3 if restriction.get("selected") else 2)
-            marker.show()
-            self.__visible_restriction_markers[marker_id] = marker
-
-        self.mapView.refresh()
+        self.__map_manager.display_visible_restrictions(restrictions)
 
     def __clear_visible_restriction_markers(self):
-        for marker in self.__visible_restriction_markers.values():
-            self.mapView.scene().removeItem(marker)
-        self.__visible_restriction_markers.clear()
-        self.mapView.refresh()
+        self.__map_manager.clear_visible_restriction_markers()
 
     def __set_main_ui_locked(self, locked: bool):
         for menu in (self.settings_menu, self.view_menu, self.about_menu):

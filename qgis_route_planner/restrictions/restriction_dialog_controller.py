@@ -11,9 +11,9 @@ if TYPE_CHECKING:
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject, QDateTime
 from qgis.core import QgsPointXY
 
-from qgis_route_planner.restrictions.restriction_type import RestrictionType
-from qgis_route_planner.restrictions.restriction_record import RestrictionRecord
-from qgis_route_planner.shared.form_mode import FormMode
+from qgis_route_planner.restrictions import RestrictionRecord, RestrictionType
+
+from qgis_route_planner.presentation import FormMode
 
 
 class RestrictionDialogController(QObject):
@@ -45,8 +45,8 @@ class RestrictionDialogController(QObject):
         self.__load_restrictions()
 
     @pyqtSlot(object)
-    def change_restriction_type_value(self, value: RestrictionType):
-        self.__model.restriction_type = value
+    def change_restriction_type_value(self, value: int):
+        self.__model.restriction_type_id = value
 
     @pyqtSlot(str)
     def change_name_value(self, value: str):
@@ -140,13 +140,20 @@ class RestrictionDialogController(QObject):
             self.show_warning.emit("Добавьте хотя бы одну точку для ограничения!")
             return
 
-        rt = self.__model.restriction_type
-        type_name = getattr(rt, "name", str(rt))
-        max_height_m = self.__model.max_height if type_name == "DIMENSION" else None
-        max_width_m = self.__model.max_width if type_name == "DIMENSION" else None
-        max_weight_t = self.__model.max_weight if type_name == "DIMENSION" else None
-        valid_from = self.__date_to_storage_text(self.__model.valid_from) if type_name == "TEMPORARY" else None
-        valid_to = self.__date_to_storage_text(self.__model.valid_to) if type_name == "TEMPORARY" else None
+        restriction_type_id = self.__model.restriction_type_id
+        max_height_m = self.__model.max_height if restriction_type_id == RestrictionType.DIMENSION.value else None
+        max_width_m = self.__model.max_width if restriction_type_id == RestrictionType.DIMENSION.value else None
+        max_weight_t = self.__model.max_weight if restriction_type_id == RestrictionType.DIMENSION.value else None
+        valid_from = (
+            self.__date_to_storage_text(self.__model.valid_from)
+            if restriction_type_id == RestrictionType.TEMPORARY.value
+            else None
+        )
+        valid_to = (
+            self.__date_to_storage_text(self.__model.valid_to)
+            if restriction_type_id == RestrictionType.TEMPORARY.value
+            else None
+        )
         value_num = next(
             (value for value in (max_height_m, max_width_m, max_weight_t) if value and value > 0),
             None,
@@ -158,7 +165,7 @@ class RestrictionDialogController(QObject):
 
             for node_id in node_ids:
                 record = RestrictionRecord(
-                    restriction_type_id=RestrictionRecord.type_to_id(rt),
+                    restriction_type_id=restriction_type_id,
                     name=name,
                     node_id=node_id,
                     value_num=value_num,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from qgis_route_planner.vehicle import VehicleType
 from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
 
 
@@ -20,7 +21,7 @@ class VehicleProfileRepository:
         return VehicleProfile(
             id=data.get("id"),
             name=data.get("name", ""),
-            type=data.get("type", "CAR"),
+            type=data.get("type", VehicleType.CAR),
             height_m=float(data.get("height_m") or 0.0),
             width_m=float(data.get("width_m") or 0.0),
             weight_t=float(data.get("weight_t") or 0.0),
