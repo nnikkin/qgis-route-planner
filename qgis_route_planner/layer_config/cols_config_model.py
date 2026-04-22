@@ -1,8 +1,8 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from column_role import ColumnRole
-from layer_role import LayerRole
-from layer_config_model import Layer
+from .column_role import ColumnRole
+from .layer_role import LayerRole
+from .layer_config_model import Layer
 
 from dataclasses import dataclass
 

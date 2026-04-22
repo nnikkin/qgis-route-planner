@@ -1,49 +1,40 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from db_config_model import DbConfigModel
-    from schema_service import SchemaService
+    from .db_config_model import DbConfigModel
 
-from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject
 
-class DbInitController:
+class DbInitController(QObject):
     """ Контроллер окон инициализации плагина """
 
-    con_test_requested = pyqtSignal()
+    con_test_requested = pyqtSignal(str, str, str, str, str)
     con_params_obtained = pyqtSignal()
-    schemas_loaded = pyqtSignal(list)
 
     connection_failed = pyqtSignal(str)
     layer_selection_failed = pyqtSignal(str)
     column_config_failed = pyqtSignal(str)
-    init_cancelled = pyqtSignal()
+    initialization_cancelled = pyqtSignal()
 
     show_error = pyqtSignal(str)
     show_warning = pyqtSignal(str)
     show_info = pyqtSignal(str)
 
-    def __init__(
-            self,
-            db_config_model: DbConfigModel,
-            service: SchemaService = None,
-    ):
+    def __init__(self, model: DbConfigModel):
         super().__init__()
+        self.__db_config_model: DbConfigModel = model
 
-        self.__db_config_model: DbConfigModel = db_config_model
+    def cancel_initialization(self):
+        self.initialization_cancelled.emit()
 
-        self.__service = service
-
-    def set_service(self, service: SchemaService):
-        self.__service = service
-
-    @pyqtSlot()
-    def initialization_cancelled(self):
-        self.init_cancelled.emit()
-
-    @pyqtSlot()
-    def request_connection(self):
-        self.__service = None
-        self.con_test_requested.emit()
+    def request_connection_test(self):
+        self.con_test_requested.emit(
+            self.__db_config_model.host,
+            self.__db_config_model.port,
+            self.__db_config_model.username,
+            self.__db_config_model.password,
+            self.__db_config_model.database
+        )
 
     @pyqtSlot(str)
     def change_host_value(self, new_value: str):
@@ -69,21 +60,11 @@ class DbInitController:
     def change_schema_value(self, new_value: str):
         self.__db_config_model.schema = new_value
 
-    @pyqtSlot()
     def validate_values_for_schema(self):
         return self.__db_config_model.validate_values_for_schema()
 
-    @pyqtSlot()
     def validate_connection_step(self):
         return self.__db_config_model.validate_all_values()
 
-    @pyqtSlot()
-    def get_schemas(self) -> list[str]:
-        if self.__service is None:
-            self.connection_failed.emit("Не удалось подключиться.\nПроверьте правильность введённых данных.")
-            return []
-        return self.__service.get_schemas()
-
-    @pyqtSlot()
     def connection_step_finish(self):
         self.con_params_obtained.emit()

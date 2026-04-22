@@ -1,11 +1,13 @@
 import psycopg
-from psycopg import sql
+from psycopg import sql, DatabaseError
+
+from qgis_route_planner.exceptions import DbConnectionError
 
 
 class DbConnection:
     """ Низкоуровневый класс для работы с БД """
 
-    def __init__(self, host: str, port: int, database: str, username: str, password: str, schema: str = None):
+    def __init__(self, host: str, port: str, database: str, username: str, password: str, schema: str = None):
         self.host = host
         self.port = port
         self.database = database
@@ -47,6 +49,61 @@ class DbConnection:
             with connection.cursor() as cursor:
                 self.__apply_search_path(cursor)
                 cursor.execute(query, params)
+
+    def get_schemas(self) -> list[str]:
+        """ Получить список схем БД """
+        try:
+            query = """
+                    SELECT schema_name
+                    FROM information_schema.schemata
+                    WHERE schema_name NOT IN ('information_schema', 'pg_catalog') \
+                      AND schema_name NOT LIKE 'pg_%%' \
+                      AND schema_name <> 'routing'; \
+                    """
+            rows = self.execute_query(query)
+            return [row[0] for row in rows]
+        except DatabaseError as e:
+            raise DbConnectionError(
+                f"не удалось получить список схем базы данных {e}",
+                operation="get_schemas"
+            ) from e
+        except Exception as e:
+            raise DbConnectionError(
+                str(e),
+                operation="get_schemas"
+            ) from e
+
+    def get_tables(self) -> list[tuple]:
+        """ Получить список таблиц в БД """
+        query = """
+            SELECT table_name
+                FROM information_schema.tables
+                WHERE
+                    table_schema = %s AND
+                    table_name <> 'spatial_ref_sys' AND
+                    table_type = 'BASE TABLE';
+        """
+        return self.execute_query(query, self.schema)
+
+    def get_table_columns(self, table_name: str) -> list:
+        """ Получить поля таблицы """
+        if self.schema:
+            query = """
+                SELECT column_name, data_type
+                    FROM information_schema.columns
+                        WHERE table_name = %s
+                            AND table_schema = %s
+                ORDER BY ordinal_position
+            """
+            return self.execute_query(query, table_name, self.schema)
+
+        query = """
+            SELECT column_name, data_type
+                FROM information_schema.columns
+                  WHERE table_name = %s
+            ORDER BY ordinal_position
+        """
+        return self.execute_query(query, table_name)
 
     def test_connection(self) -> bool:
         """ Проверка возможности подключения """

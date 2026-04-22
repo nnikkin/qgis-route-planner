@@ -3,10 +3,12 @@ from __future__ import annotations
 import psycopg.errors
 from psycopg import sql
 
-from layer_config_model import Layer
+from .layer_config_model import Layer
+from .layer_role import LayerRole
+from .column_role import ColumnRole
+
 from qgis_route_planner.exceptions import NodeNotFoundError
-from qgis_route_planner.layer_config.column_role import ColumnRole
-from layer_role import LayerRole
+
 from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
 from qgis_route_planner.core.db_connection import DbConnection
 

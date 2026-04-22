@@ -1,3 +1,3 @@
+from .db_connection import DbConnection
+from .plugin_сoordinator import PluginCoordinator
 from .qgis_route_planner import QgisRoutePlanner
-from plugin_сoordinator import PluginCoordinator
-from db_connection import DbConnection

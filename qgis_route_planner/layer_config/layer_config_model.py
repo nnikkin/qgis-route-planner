@@ -1,9 +1,8 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
-
-from layer_role import LayerRole
-
-
+from .layer_role import LayerRole
 from dataclasses import dataclass
+
+
 @dataclass
 class Layer:
     name: str

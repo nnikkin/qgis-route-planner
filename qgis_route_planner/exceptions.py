@@ -1,32 +1,31 @@
 from __future__ import annotations
 
+from qgis_route_planner.logger import Logger
 
-class RoutingPluginError(Exception):
-    pass
 
-class TopologyBuildError(RoutingPluginError):
+class PluginError(Exception):
+    def __init__(self, message: str, operation: str | None = None):
+        super().__init__(message)
+        self.operation = operation
+        Logger.error(f"{operation}: {message}")
+
+class TopologyBuildError(PluginError):
     """ Ошибка при построении топологии графа """
     pass
 
-class NodeNotFoundError(RoutingPluginError):
+class NodeNotFoundError(PluginError):
     """ Узел не найден в графе """
     pass
 
-class DbConnectionError(RoutingPluginError):
-    def __init__(self, message: str, operation: str | None = None):
-        super().__init__(message)
-        self.operation = operation
+class DbConnectionError(PluginError):
+    pass
 
-class DataImportError(RoutingPluginError):
+class DataImportError(PluginError):
     """ Ошибка при импорте слоёв в граф """
-    def __init__(self, message: str, layer_name: str | None = None):
-        super().__init__(message)
-        self.layer_name = layer_name
+    pass
 
-class ProfileOperationError(RoutingPluginError):
-    def __init__(self, message: str, operation: str | None = None):
-        super().__init__(message)
-        self.operation = operation
+class ProfileOperationError(PluginError):
+    pass
 
-class WeatherServiceError(RoutingPluginError):
+class WeatherServiceError(PluginError):
     pass

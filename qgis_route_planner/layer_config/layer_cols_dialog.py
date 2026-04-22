@@ -2,15 +2,16 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from column_dialog_controller import ColmunDialogController
-    from cols_config_model import ColumnsConfigModel
-    from cols_config_model import ColumnInfo
+    from .layer_dialogs_controller import LayerDialogsController
+    from .cols_config_model import ColumnsConfigModel
+    from .cols_config_model import ColumnInfo
 
 from qgis.PyQt import QtCore, QtWidgets
+from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from qgis_route_planner.presentation import MessageBoxMixin
-from column_role import ColumnRole
+from .column_role import ColumnRole
 
 
 class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -19,7 +20,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __init__(
             self,
             model: ColumnsConfigModel,
-            controller: ColmunDialogController,
+            controller: LayerDialogsController,
             parent: QObject = None
     ):
         super().__init__(parent)
@@ -39,10 +40,12 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.buttonBox.accepted.connect(self.__on_accept)
         self.buttonBox.rejected.connect(self.close)
+        self.backButton.clicked.connect(self.__on_back)
 
     def __setupUi(self):
         self.setObjectName("TableColumnsDialog")
         self.resize(900, 700)
+        self.setWindowIcon(QIcon(":/plugins/qgis_route_planner/plugin_icon"))
 
         self.verticalLayout = QtWidgets.QVBoxLayout(self)
         self.verticalLayout.setObjectName("verticalLayout")
@@ -68,6 +71,11 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.StandardButton.Cancel |
                                           QtWidgets.QDialogButtonBox.StandardButton.Ok)
         self.buttonBox.setObjectName("buttonBox")
+        self.backButton = self.buttonBox.addButton(
+            "Назад",
+            QtWidgets.QDialogButtonBox.ButtonRole.ActionRole
+        )
+        self.backButton.setObjectName("backButton")
         self.verticalLayout.addWidget(self.buttonBox)
 
         self.__retranslateUi()
@@ -78,6 +86,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
         _translate = QtCore.QCoreApplication.translate
         self.setWindowTitle(_translate("TableColumnsDialog", "Шаг 3: сопоставление полей выбранных таблиц"))
         self.label.setText(_translate("TableColumnsDialog", "Укажите назначение каждого из столбцов для таблиц."))
+        self.backButton.setText(_translate("TableColumnsDialog", "Назад"))
 
     def showEvent(self, event, **kwargs):
         super().showEvent(event)
@@ -89,11 +98,11 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
             event.accept()
             return
 
-        close_question = self._show_question(
+        close_question = self._show_question(self,
             "Для продолжения требуется выполнить настройку полей.\nВы уверены, что хотите закрыть мастер подключения?"
         )
         if close_question:
-            self.__controller.initialization_cancelled()
+            self.__controller.cancel_initialization()
             event.accept()
         else:
             event.ignore()
@@ -101,9 +110,14 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __on_accept(self):
         self.__controller.column_setup_step_finish()
 
+    def __on_back(self):
+        self.__step_finished = True
+        self.reject()
+        self.__controller.column_setup_step_back()
+
     @pyqtSlot(str)
     def __on_column_config_failed(self, message: str):
-        self._show_error(message)
+        self._show_error(self, message)
 
     def __accept_step(self):
         self.__step_finished = True

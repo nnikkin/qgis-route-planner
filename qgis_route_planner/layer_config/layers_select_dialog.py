@@ -2,14 +2,15 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from qgis_route_planner.setup.init_dialogs_controller import InitDialogsController
-    from qgis_route_planner.setup.layer_config_model import LayerConfigModel, Layer
+    from .layer_dialogs_controller import LayerDialogsController
+    from .layer_config_model import LayerConfigModel, Layer
 
 from qgis.PyQt import QtCore, QtWidgets
+from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
-from qgis_route_planner.shared.message_box_mixin import MessageBoxMixin
-from qgis_route_planner.setup.layer_role import LayerRole
+from qgis_route_planner.presentation.message_box_mixin import MessageBoxMixin
+from .layer_role import LayerRole
 
 
 class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -18,13 +19,13 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __init__(
             self,
             model: LayerConfigModel,
-            controller: InitDialogsController,
+            controller: LayerDialogsController,
             parent: QObject = None
     ):
         super().__init__(parent)
 
         self.__model: LayerConfigModel = model
-        self.__controller: InitDialogsController = controller
+        self.__controller: LayerDialogsController = controller
 
         self.__available_layers: list = []
         self.__step_finished = False
@@ -36,6 +37,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.pushItemToListButton.clicked.connect(self.__on_push_to_list_clicked)
         self.buttonBox.accepted.connect(self.__on_accept)
         self.buttonBox.rejected.connect(self.close)
+        self.backButton.clicked.connect(self.__on_back)
 
         self.__model.layers_changed.connect(self.__update_layers_table)
 
@@ -45,6 +47,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __setupUi(self):
         self.setObjectName("SelectLayersDialog")
         self.resize(800, 400)
+        self.setWindowIcon(QIcon(":/plugins/qgis_route_planner/plugin_icon"))
 
         self.verticalLayout = QtWidgets.QVBoxLayout(self)
         self.verticalLayout.setObjectName("verticalLayout")
@@ -129,6 +132,11 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
                                           QtWidgets.QDialogButtonBox.StandardButton.Ok)
         self.buttonBox.setCenterButtons(False)
         self.buttonBox.setObjectName("buttonBox")
+        self.backButton = self.buttonBox.addButton(
+            "Назад",
+            QtWidgets.QDialogButtonBox.ButtonRole.ActionRole
+        )
+        self.backButton.setObjectName("backButton")
         self.verticalLayout.addWidget(self.buttonBox)
 
         self.setTabOrder(self.listWidget, self.pushItemToTableButton)
@@ -145,6 +153,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.label.setText(_translate("Dialog", "Выберите слои из базы данных для обработки."))
         self.pushItemToTableButton.setText(_translate("Dialog", ">>"))
         self.pushItemToListButton.setText(_translate("Dialog", "<<"))
+        self.backButton.setText(_translate("Dialog", "Назад"))
         item = self.tableWidget.horizontalHeaderItem(0)
         item.setText(_translate("Dialog", "Название"))
         item = self.tableWidget.horizontalHeaderItem(1)
@@ -163,12 +172,12 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
             event.accept()
             return
 
-        close_question = self._show_question(
+        close_question = self._show_question(self,
             "Для продолжения требуется выбрать слои.\nВы уверены, что хотите закрыть мастер подключения?",
             "Внимание"
         )
         if close_question:
-            self.__controller.initialization_cancelled()
+            self.__controller.cancel_initialization()
             event.accept()
         else:
             event.ignore()
@@ -176,7 +185,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __on_push_to_table_clicked(self):
         selected_item = self.listWidget.currentItem()
         if not selected_item:
-            self._show_warning("Выберите название слоя из списка слева.")
+            self._show_warning(self, "Выберите название слоя из списка слева.")
             return
         l_name = selected_item.text()
         self.__controller.add_layer_to_config(layer_name=l_name, layer_role=LayerRole.ROADS)
@@ -185,7 +194,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
         selected_rows = self.tableWidget.selectionModel().selectedRows()
 
         if not selected_rows:
-            self._show_warning("Выберите строку в таблице справа.")
+            self._show_warning(self, "Выберите строку в таблице справа.")
             return
 
         self.__controller.remove_layer_from_config(selected_rows[0].row())
@@ -193,13 +202,18 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __on_accept(self):
         self.__controller.layer_select_step_finish()
 
+    def __on_back(self):
+        self.__step_finished = True
+        self.reject()
+        self.__controller.layer_select_step_back()
+
     def __accept_step(self):
         self.__step_finished = True
         self.accept()
 
     @pyqtSlot(str)
     def __on_layer_selection_failed(self, message: str):
-        self._show_warning(message)
+        self._show_warning(self, message)
 
     def __on_combobox_role_changed(self, row, text):
         role = LayerRole.from_value(text)

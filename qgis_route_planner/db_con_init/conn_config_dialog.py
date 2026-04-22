@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from typing import TYPE_CHECKING
-
-
 if TYPE_CHECKING:
     from db_init_controller import DbInitController
 
 from qgis.PyQt import QtWidgets
-from qgis.PyQt.QtGui import QRegExpValidator
-from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QMetaObject, QCoreApplication, pyqtSlot
+from qgis.PyQt.QtGui import QRegExpValidator, QIcon
+from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QCoreApplication, pyqtSlot
 
 from qgis_route_planner.presentation import MessageBoxMixin
-from db_config_model import DbConfigModel
+from .db_config_model import DbConfigModel
 
 class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     """ Диалоговое окно подключения к БД """
@@ -33,30 +31,10 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__setupUi()
 
-    def __connect(self):
-        self.host_edit.textChanged.connect(self.__controller.change_host_value)
-        self.port_edit.textChanged.connect(self.__controller.change_port_value)
-        self.username_edit.textChanged.connect(self.__controller.change_username_value)
-        self.password_edit.textChanged.connect(self.__controller.change_password_value)
-        self.database_edit.textChanged.connect(self.__controller.change_database_value)
-        self.schema_comboBox.currentTextChanged.connect(self.__controller.change_schema_value)
-        self.check_con_button.clicked.connect(self.__fill_combobox)
-        self.buttonBox.accepted.connect(self.__on_accept)
-        self.buttonBox.rejected.connect(self.close)
-
-        self.__model.host_changed.connect(self.__on_host_value_changed)
-        self.__model.port_changed.connect(self.__on_port_value_changed)
-        self.__model.password_changed.connect(self.__on_password_value_changed)
-        self.__model.username_changed.connect(self.__on_username_value_changed)
-        self.__model.database_changed.connect(self.__on_database_value_changed)
-        self.__model.schema_changed.connect(self.__on_schema_value_changed)
-        self.__model.any_field_changed.connect(self.__update_check_button)
-
-        self.__controller.connection_failed.connect(self.__on_connection_failed)
-
     def __setupUi(self):
         self.setObjectName("DbConnectionSetupDialog")
         self.resize(350, 250)
+        self.setWindowIcon(QIcon(":/plugins/qgis_route_planner/plugin_icon"))
 
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
@@ -149,7 +127,6 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.gridLayout.addWidget(self.buttonBox, 1, 0, 1, 1)
 
         self.__retranslateUi()
-        QMetaObject.connectSlotsByName(self)
         self.__connect()
 
     def __retranslateUi(self):
@@ -166,6 +143,28 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.label_2.setText(_translate("Dialog", "Схема:"))
         self.label_3.setText(_translate("Dialog", "База данных:"))
 
+    def __connect(self):
+        self.host_edit.textChanged.connect(self.__controller.change_host_value)
+        self.port_edit.textChanged.connect(self.__controller.change_port_value)
+        self.username_edit.textChanged.connect(self.__controller.change_username_value)
+        self.password_edit.textChanged.connect(self.__controller.change_password_value)
+        self.database_edit.textChanged.connect(self.__controller.change_database_value)
+        self.schema_comboBox.currentTextChanged.connect(self.__controller.change_schema_value)
+        self.check_con_button.clicked.connect(self.__on_test_button_clicked)
+        self.buttonBox.accepted.connect(self.__on_accept)
+        self.buttonBox.rejected.connect(self.close)
+
+        self.__model.host_changed.connect(self.__on_host_value_changed)
+        self.__model.port_changed.connect(self.__on_port_value_changed)
+        self.__model.password_changed.connect(self.__on_password_value_changed)
+        self.__model.username_changed.connect(self.__on_username_value_changed)
+        self.__model.database_changed.connect(self.__on_database_value_changed)
+        self.__model.schema_changed.connect(self.__on_schema_value_changed)
+        self.__model.schemas_obtained.connect(self.__fill_schemas_combobox)
+        self.__model.any_field_changed.connect(self.__update_check_button)
+
+        self.__controller.connection_failed.connect(self.__on_connection_failed)
+
     def showEvent(self, event, **kwargs):
         super().showEvent(event)
         self.__step_finished = False
@@ -173,11 +172,14 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     def closeEvent(self, event, **kwargs):
         if not self.__step_finished:
             close_dialog = self._show_question(
+                self,
                 "Для продолжения требуется настроить подключение.\nВы уверены, что хотите закрыть мастер подключения?"
             )
 
             if close_dialog:
-                self.__controller.initialization_cancelled()
+                self.__step_finished = False
+                self.__reset_fields()
+                self.__controller.cancel_initialization()
                 event.accept()
             else:
                 event.ignore()
@@ -189,6 +191,13 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.schema_comboBox.blockSignals(False)
         self.__controller.change_schema_value("")
         self.schema_comboBox.setEnabled(False)
+
+    @pyqtSlot(list)
+    def __fill_schemas_combobox(self, schemas: list[str]):
+        self.schema_comboBox.clear()
+        self.schema_comboBox.addItems(schemas)
+        self.schema_comboBox.setCurrentIndex(0)
+        self.schema_comboBox.setEnabled(True if len(schemas) > 0 else False)
 
     @pyqtSlot(str)
     def __on_host_value_changed(self, value):
@@ -217,32 +226,31 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
             self.schema_comboBox.setCurrentIndex(index)
 
     @pyqtSlot(str)
-    def __on_connection_failed(self, message: str):
-        self._show_critical("Ошибка подключения: " + message)
+    def __on_connection_failed(self, e):
+        self._show_critical(self, f"При попытке подключиться произошла ошибка: {e}\nПроверьте данные и попробуйте ещё раз.")
         self.check_con_button.setEnabled(True)
 
     def __on_accept(self):
         if not self.__controller.validate_connection_step():
-            self._show_info("Заполните параметры подключения, нажмите \"Проверить подключение\" и выберите схему.")
+            self._show_info(self, "Заполните параметры подключения, нажмите \"Проверить подключение\" и выберите схему из списка.")
             return
 
         self.__step_finished = True
         self.accept()
         self.__controller.connection_step_finish()
 
-    def __fill_combobox(self):
+    def __on_test_button_clicked(self):
+        self.check_con_button.setEnabled(False)
+        self.__controller.request_connection_test()
+        self.check_con_button.setEnabled(True)
+
+    def __reset_fields(self):
+        self.port_edit.setText("")
+        self.database_edit.setText("")
+        self.password_edit.setText("")
+        self.host_edit.setText("")
+        self.username_edit.setText("")
+        self.schema_comboBox.addItems([])
+        self.schema_comboBox.setCurrentText("")
         self.schema_comboBox.setEnabled(False)
         self.check_con_button.setEnabled(False)
-        self.schema_comboBox.clear()
-
-        self.__controller.request_connection()
-        schemas = self.__controller.get_schemas()
-        if not schemas:
-            self.check_con_button.setEnabled(True)
-            return
-
-        self.schema_comboBox.addItems(schemas)
-        self.schema_comboBox.setCurrentIndex(0)
-
-        self.schema_comboBox.setEnabled(True)
-        self.check_con_button.setEnabled(True)
