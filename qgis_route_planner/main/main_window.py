@@ -3,22 +3,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qgis_route_planner.routing.route_point import RoutePoint
-    from main_window_controller import MainWindowController
-    from main_window_model import MainWindowModel
+    from qgis_route_planner.main.point_dto import RoutePointDto
+    from .main_window_controller import MainWindowController
+    from .main_window_model import MainWindowModel
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import pyqtSlot
 from qgis.PyQt.QtWidgets import QAction, QMenu
-from qgis.PyQt.QtGui import QCursor
+from qgis.PyQt.QtGui import QCursor, QIcon
 from qgis.PyQt.QtCore import Qt
 
 from qgis.core import QgsPointXY, QgsVectorLayer
 from qgis.gui import QgsMapToolPan, QgsMapToolZoom
 
 from qgis_route_planner.routing.point_type import PointType
-from map_canvas_manager import MapCanvasManager
-from map_widget import MapWidget
-from route_list_widget import RouteListWidget
+from .map_canvas_manager import MapCanvasManager
+from .map_widget import MapWidget
+from .route_list_widget import RouteListWidget
 from qgis_route_planner.presentation.message_box_mixin import MessageBoxMixin
 
 
@@ -38,6 +39,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
     def __setupUi(self):
         self.setObjectName("PluginMainWindow")
         self.resize(800, 600)
+        self.setWindowIcon(QIcon(":/plugins/qgis_route_planner/plugin_icon"))
 
         self.central_widget = QtWidgets.QWidget(self)
         self.gridLayout_3 = QtWidgets.QGridLayout(self.central_widget)
@@ -160,8 +162,8 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__controller.point_marker_remove_requested.connect(self.__remove_point_marker)
         self.__controller.point_marker_update_requested.connect(self.__update_point_marker_color)
         self.__controller.restriction_point_added.connect(self.__add_restriction_point_marker)
-        self.__controller.restrictions_display_requested.connect(self.__display_visible_restrictions)
-        self.__controller.restrictions_display_cleared.connect(self.__clear_visible_restriction_markers)
+        self.__controller.restrict_points_display_requested.connect(self.__display_visible_restrictions)
+        self.__controller.restrict_points_display_cleared.connect(self.__clear_visible_restriction_markers)
 
         self.__connect_ui_to_controller()
 
@@ -201,18 +203,18 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.route_list_widget.route_save_requested.connect(self.__controller.on_save_route)
 
     @pyqtSlot(list)
-    def __on_points_changed(self, points: list[RoutePoint]):
+    def __on_points_changed(self, points: list[RoutePointDto]):
         self.points_list_widget.clear()
         for route_point in points:
-            if route_point.point_type == PointType.START:
+            if route_point.point_type == PointType.START.name:
                 prefix = "НАЧАЛО"
-            elif route_point.point_type == PointType.END:
+            elif route_point.point_type == PointType.END.name:
                 prefix = "КОНЕЦ"
             else:
                 prefix = f"Точка {route_point.order}"
 
             item = QtWidgets.QListWidgetItem(
-                f"{prefix}: ({route_point.qgs_point_xy.x():.6f}, {route_point.qgs_point_xy.y():.6f})"
+                f"{prefix}: ({route_point.x:.6f}, {route_point.y:.6f})"
             )
             item.setData(Qt.ItemDataRole.UserRole, route_point.id)
             self.points_list_widget.addItem(item)
@@ -244,14 +246,14 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         }
 
         if message == "error:no_profile":
-            q = self._show_question(
+            q = self._show_question(self,
                 "Сначала нужно создать профиль транспортного средства, либо установить существующий в качестве активного."
                 "\nВы хотите перейти в управление профилями?"
             )
             if q:
                 self.__controller.open_settings_dialog(1)
         elif message in error_messages and error_messages[message]:
-            self._show_warning(error_messages[message])
+            self._show_warning(self, error_messages[message])
         else:
             self.statusBar().showMessage(message)
 
@@ -292,8 +294,8 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         else:
             points = self.__model.points
-            has_start = any(p.point_type == PointType.START for p in points)
-            has_end = any(p.point_type == PointType.END for p in points)
+            has_start = any(p.point_type == PointType.START.name for p in points)
+            has_end = any(p.point_type == PointType.END.name for p in points)
 
             actions = [
                 ("Установить как начальную точку", PointType.START, not has_start),
@@ -399,6 +401,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     def __open_about_dialog(self):
         self._show_info(
+            self,
             """<html><body>
                     <p>В проекте используется набор иконок Fugue Icons.<br>
                     (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>. All rights reserved.</p>

@@ -48,10 +48,10 @@ class MapCanvasManager:
         if marker:
             self.__map_canvas.scene().removeItem(marker)
 
-    def update_point_marker_color(self, point_id: int, point_type: PointType):
+    def update_point_marker_color(self, point_id: int, point_type_name: str):
         marker = self.__point_markers.get(point_id)
         if marker:
-            self.__set_marker_color(marker, point_type)
+            self.__set_marker_color(marker, point_type_name)
 
     def display_routes(self, routes: list):
         self.clear_route_bands()
@@ -192,11 +192,11 @@ class MapCanvasManager:
         layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
 
     @staticmethod
-    def __set_marker_color(marker: QgsVertexMarker, point_type: PointType):
+    def __set_marker_color(marker: QgsVertexMarker, point_type_str: str):
         colors = {
             PointType.START: Qt.green,
             PointType.END: Qt.magenta,
             PointType.WAYPOINT: Qt.black,
             PointType.RESTRICTION: Qt.red,
         }
-        marker.setColor(colors.get(point_type, Qt.black))
+        marker.setColor(colors.get(point_type_str, Qt.black))
