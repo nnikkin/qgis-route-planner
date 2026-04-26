@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from qgis_route_planner.restrictions.restriction_type import RestrictionType
+from .restriction_type import RestrictionType
 
 
 @dataclass

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import psycopg.errors as psycopgError
 
 from datetime import datetime
 from psycopg.errors import Error as PsycopgError
@@ -15,10 +16,20 @@ class RestrictionService:
     def __init__(self, restriction_repo: RestrictionRepository | None = None):
         self.__restriction_repo = restriction_repo
 
+    def run_init_database(self):
+        """ Инициализация БД """
+        try:
+            if self.__restriction_repo is not None:
+                self.__restriction_repo.ensure_default_types()
+        except psycopgError.Error as e:
+            raise DbConnectionError(
+                "Произошла ошибка при инициализации типов ограничений" + f"\n{e}",
+                operation="run_init_database"
+            ) from e
+
     def get_all_restrictions(self) -> list[dict]:
         """ Получить все ограничения из БД """
         try:
-            self.__restriction_repo.ensure_default_types()
             return self.__restriction_repo.get_all()
         except PsycopgError as e:
             raise DbConnectionError(
@@ -29,7 +40,6 @@ class RestrictionService:
     def get_restriction_by_id(self, restr_id: int) -> dict | None:
         """ Получить ограничение по ID """
         try:
-            self.__restriction_repo.ensure_default_types()
             return self.__restriction_repo.get_by_id(restr_id)
         except PsycopgError as e:
             raise DbConnectionError(

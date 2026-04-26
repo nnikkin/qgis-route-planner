@@ -1,7 +1,8 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 from qgis_route_planner.presentation.form_mode import FormMode
 
-from qgis_route_planner.restrictions import RestrictionRecord, RestrictionType
+from .restriction_record import RestrictionRecord
+from .restriction_type import RestrictionType
 
 
 class RestrictionModel(QObject):

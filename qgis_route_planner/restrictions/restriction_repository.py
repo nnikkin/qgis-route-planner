@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import psycopg.errors
 
-from qgis_route_planner.restrictions import RestrictionRecord, RestrictionType
+from .restriction_record import RestrictionRecord
+from .restriction_type import RestrictionType
 from qgis_route_planner.core.db_connection import DbConnection
 
 
@@ -60,7 +61,7 @@ class RestrictionRepository:
             (RestrictionType.DIMENSION.value, RestrictionType.DIMENSION.name),
             (RestrictionType.TEMPORARY.value, RestrictionType.TEMPORARY.name),
         ]
-        for type_id, code, name in defaults:
+        for type_id, code in defaults:
             if type_id in existing:
                 continue
             try:
@@ -71,7 +72,7 @@ class RestrictionRepository:
                     VALUES (%s, %s)
                     ON CONFLICT (restriction_type_id) DO NOTHING
                     """,
-                    type_id, code,
+                    type_id, code
                 )
             except psycopg.errors.DuplicateColumn:
                 pass
@@ -196,7 +197,7 @@ class RestrictionRepository:
     def get_types(self) -> list:
         return self.__db.execute_query(
             """
-            SELECT restriction_type_id, code, name
+            SELECT restriction_type_id, code
             FROM routing.restriction_types
             ORDER BY restriction_type_id
             """
