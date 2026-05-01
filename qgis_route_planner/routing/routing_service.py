@@ -1,17 +1,13 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from qgis_route_planner.vehicle import VehicleProfile
 
 from qgis.core import QgsPointXY
 from qgis.PyQt.QtWidgets import QMessageBox
 
 from qgis_route_planner.exceptions import WeatherServiceError, NodeNotFoundError
 
-from selected_point_collection import SelectedPointCollection
-from graph_provider import GraphProvider
-from weather_service import WeatherService
+from .selected_point_collection import SelectedPointCollection
+from .graph_provider import GraphProvider
+from .weather_service import WeatherService
 
 
 class RoutingService:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from qgis.core import QgsPointXY
 
-from point_type import PointType
-from route_point import RoutePoint
+from .point_type import PointType
+from .route_point import RoutePoint
 
 
 class SelectedPointCollection:

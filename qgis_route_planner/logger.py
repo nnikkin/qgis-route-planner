@@ -5,15 +5,6 @@ from qgis.core import QgsMessageLog, Qgis
 
 class Logger:
     @staticmethod
-    def debug(msg: str, tag: str = ''):
-        logging.getLogger().debug(msg)
-        QgsMessageLog.logMessage(
-            f"DEBUG: {msg}",
-            "QgisRoutePlanner",
-            Qgis.MessageLevel.NoLevel,
-        )
-
-    @staticmethod
     def info(msg: str):
         logging.getLogger().info(msg)
         QgsMessageLog.logMessage(
@@ -35,16 +26,7 @@ class Logger:
     def error(msg: str | Exception):
         logging.getLogger().error(msg)
         QgsMessageLog.logMessage(
-            f"ERROR: {msg}",
-            "QgisRoutePlanner",
-            Qgis.MessageLevel.Warning,
-        )
-
-    @staticmethod
-    def critical(msg: str):
-        logging.getLogger().critical(msg)
-        QgsMessageLog.logMessage(
-            msg,
+            f"{msg}",
             "QgisRoutePlanner",
             Qgis.MessageLevel.Critical,
         )
