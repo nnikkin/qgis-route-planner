@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from qgis.PyQt.QtCore import QSettings
 
-from qgis_route_planner.exceptions import RoutingPluginError
+from qgis_route_planner.exceptions import PluginError
 from qgis_route_planner.core.db_connection import DbConnection
 
 
@@ -55,7 +55,13 @@ class SettingsService:
         schema = self.__settings.value(self.__KEY_SCHEMA, "")
         self.__settings.endGroup()
 
-        db = DbConnection(host, int(port), database, username, password, schema)
+        db = DbConnection(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            database=database,
+        )
         return db if db.is_complete() else None
 
     def save_db_params(self, db: DbConnection):
@@ -117,7 +123,7 @@ class SettingsService:
             self.__settings.endGroup()
             self.__settings.sync()
         except Exception as e:
-            raise RoutingPluginError(f" {str(e)}") from e
+            raise PluginError(f" {str(e)}") from e
 
     def load_select_distance_setting(self) -> float:
         self.__settings.beginGroup(self.__GROUP_GRAPH)

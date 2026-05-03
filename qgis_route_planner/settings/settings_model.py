@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from profile_dto import ProfileDto
+from .profile_dto import ProfileDto
 from qgis_route_planner.presentation.form_mode import FormMode
 
 

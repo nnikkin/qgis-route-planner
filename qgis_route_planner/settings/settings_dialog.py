@@ -2,11 +2,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from settings_dialog_controller import SettingsDialogController
-    from settings_model import SettingsModel
-    from profile_dto import ProfileDto
+    from .settings_dialog_controller import SettingsDialogController
+    from .settings_model import SettingsModel
+    from .profile_dto import ProfileDto
 
 from qgis.PyQt import QtCore, QtWidgets
+from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from qgis_route_planner.presentation import MessageBoxMixin, FormMode
@@ -68,6 +69,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __setupUi(self):
         self.setObjectName("SettingsDialog")
         self.resize(600, 400)
+        self.setWindowIcon(QIcon(":/plugins/qgis_route_planner/plugin_icon"))
 
         self.__verticalLayout = QtWidgets.QVBoxLayout(self)
         self.__verticalLayout.setObjectName("verticalLayout")
@@ -493,7 +495,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __confirm_delete_profile(self, profile_name: str, is_active: bool):
         """ Показать диалог подтверждения удаления профиля """
         msg = "Вы пытаетесь удалить активный профиль.\n" if is_active else ""
-        confirm_delete = self._show_question(
+        confirm_delete = self._show_question(self,
             f"{msg}Вы уверены, что хотите удалить профиль '{profile_name}'?",
             "Подтверждение удаления"
         )
@@ -507,7 +509,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         if db is None:
             return
         self.__dbHostnameEdit.setText(db.host)
-        self.__dbPortEdit.setText(str(db.port))
+        self.__dbPortEdit.setText(db.port)
         self.__dbUsernameEdit.setText(db.username)
         self.__dbPasswordEdit.setText(db.password)
         self.__dbDatabaseNameEdit.setText(db.database)
@@ -633,7 +635,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     # Слоты для событий от виджетов
     def __on_change_db_clicked(self):
         """ Обработчик нажатия на кнопку изменения БД """
-        confirm_change = self._show_question(
+        confirm_change = self._show_question(self,
             "Вы уверены, что хотите изменить настройки подключения к БД?",
         )
         if confirm_change:
@@ -642,7 +644,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def __on_rebuild_graph_clicked(self):
         """ Обработчик нажатия на кнопку перестроения графа """
-        confirm_rebuild = self._show_question(
+        confirm_rebuild = self._show_question(self,
             "Вы уверены, что хотите перестроить граф?"
         )
         if confirm_rebuild:
@@ -708,7 +710,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def closeEvent(self, event):
         """ Обработчик закрытия окна """
         if self.__model.editing_mode == FormMode.EDIT or self.__model.editing_mode == FormMode.CREATE:
-            close_question = self._show_question(
+            close_question = self._show_question(self,
                 "Вы уверены, что хотите отменить несохранённые изменения и закрыть окно настроек?"
             )
             if close_question:
