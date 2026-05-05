@@ -8,7 +8,7 @@ class VehicleService:
     def __init__(self, vehicle_repo: VehicleProfileRepository):
         self.__vehicle_repo: VehicleProfileRepository = vehicle_repo
 
-    def create_profile(self, name: str, vtype: VehicleType, height: float, width: float, depth: float, weight: float) -> int:
+    def create_profile(self, name: str, vtype: VehicleType, height: float, width: float, depth: float, weight: float) -> VehicleProfile:
         try:
             profile = VehicleProfile(
                 name=name,

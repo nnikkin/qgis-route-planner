@@ -148,7 +148,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__model.points_changed.connect(self.__on_points_changed)
         self.__model.routes_changed.connect(self.__on_routes_changed)
         self.__model.active_route_changed.connect(self.__on_active_route_changed)
-        self.__model.status_message_changed.connect(self.__on_status_message_changed)
+        self.__model.statusbar_message_changed.connect(self.__on_status_message_changed)
         self.__model.active_tab_changed.connect(self.tabWidget.setCurrentIndex)
         self.__model.clear_button_enabled_changed.connect(self.__on_clear_button_enabled_changed)
         self.__model.restriction_select_mode_activated.connect(self.__on_point_select_mode_changed)
@@ -246,14 +246,14 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         }
 
         if message == "error:no_profile":
-            q = self._show_question(self,
+            q = self._show_question(
                 "Сначала нужно создать профиль транспортного средства, либо установить существующий в качестве активного."
                 "\nВы хотите перейти в управление профилями?"
             )
             if q:
                 self.__controller.open_settings_dialog(1)
-        elif message in error_messages and error_messages[message]:
-            self._show_warning(self, error_messages[message])
+        elif error_messages[message]:
+            self._show_warning(error_messages[message])
         else:
             self.statusBar().showMessage(message)
 
@@ -401,7 +401,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     def __open_about_dialog(self):
         self._show_info(
-            self,
             """<html><body>
                     <p>В проекте используется набор иконок Fugue Icons.<br>
                     (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>. All rights reserved.</p>

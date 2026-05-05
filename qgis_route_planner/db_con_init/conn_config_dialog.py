@@ -172,7 +172,6 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     def closeEvent(self, event, **kwargs):
         if not self.__step_finished:
             close_dialog = self._show_question(
-                self,
                 "Для продолжения требуется настроить подключение.\nВы уверены, что хотите закрыть мастер подключения?"
             )
 
@@ -227,12 +226,12 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     @pyqtSlot(str)
     def __on_connection_failed(self, e):
-        self._show_critical(self, f"При попытке подключиться произошла ошибка: {e}\nПроверьте данные и попробуйте ещё раз.")
+        self._show_critical(f"При попытке подключиться произошла ошибка: {e}\nПроверьте данные и попробуйте ещё раз.")
         self.check_con_button.setEnabled(True)
 
     def __on_accept(self):
         if not self.__controller.validate_connection_step():
-            self._show_info(self, "Заполните параметры подключения, нажмите \"Проверить подключение\" и выберите схему из списка.")
+            self._show_info("Заполните параметры подключения, нажмите \"Проверить подключение\" и выберите схему из списка.")
             return
 
         self.__step_finished = True

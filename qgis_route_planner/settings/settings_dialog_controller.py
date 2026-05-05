@@ -214,11 +214,11 @@ class SettingsDialogController(QObject):
         try:
             profile = self.__profile_provider.create_profile(
                 name=name.strip(),
-                type=vehicle_type,
-                height_m=height,
-                width_m=width,
-                depth_m=depth,
-                weight_t=weight,
+                vtype=vehicle_type,
+                height=height,
+                width=width,
+                depth=depth,
+                weight=weight,
             )
             self.__model.current_profile_id = profile.id
 

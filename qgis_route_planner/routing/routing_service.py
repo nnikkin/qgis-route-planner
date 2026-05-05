@@ -85,7 +85,7 @@ class RoutingService:
             self,
             start_node_id: int,
             end_node_id: int,
-            profile: VehicleProfile,
+            profile_details: dict[str, float],
             waypoints_ids: list[int] = None,
             restriction_nodes: list[int] = None,
             route_points: list = None
@@ -120,7 +120,7 @@ class RoutingService:
 
         try:
             routes = self.__graph_provider.get_routes(
-                start_node_id, end_node_id, profile,
+                start_node_id, end_node_id, profile_details,
                 waypoints_ids, route_points, restriction_nodes,
                 route_speed_kmh=route_speed_kmh
             )

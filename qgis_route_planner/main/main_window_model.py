@@ -14,7 +14,7 @@ class MainWindowModel(QObject):
     active_profile_changed = pyqtSignal(object)
     point_select_distance_changed = pyqtSignal(float)
 
-    status_message_changed = pyqtSignal(str)
+    statusbar_message_changed = pyqtSignal(str)
     active_tab_changed = pyqtSignal(int)
     clear_button_enabled_changed = pyqtSignal(bool)
 
@@ -28,7 +28,7 @@ class MainWindowModel(QObject):
         self.__active_route_index: int = 0
         self.__active_profile: ActiveProfileDto | None = None
         self.__point_select_distance: float = 10.0
-        self.__status_message: str = ""
+        self.__statusbar_message: str = ""
         self.__active_tab: int = 0
         self.__clear_button_enabled: bool = False
         self.__restriction_select_mode: bool = False
@@ -71,7 +71,7 @@ class MainWindowModel(QObject):
         self.__active_profile = value
         self.active_profile_changed.emit(value)
         if value:
-            self.status_message = f"Активный профиль: {value.name}"
+            self.statusbar_message = f"Активный профиль: {value.name}"
 
     @property
     def point_select_distance(self) -> float:
@@ -83,13 +83,13 @@ class MainWindowModel(QObject):
         self.point_select_distance_changed.emit(value)
 
     @property
-    def status_message(self) -> str:
-        return self.__status_message
+    def statusbar_message(self) -> str:
+        return self.__statusbar_message
 
-    @status_message.setter
-    def status_message(self, value: str):
-        self.__status_message = value
-        self.status_message_changed.emit(value)
+    @statusbar_message.setter
+    def statusbar_message(self, value: str):
+        self.__statusbar_message = value
+        self.statusbar_message_changed.emit(value)
 
     @property
     def active_tab(self) -> int:

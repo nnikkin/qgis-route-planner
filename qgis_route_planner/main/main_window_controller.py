@@ -53,7 +53,7 @@ class MainWindowController(QObject):
         self.__routing_service: RoutingService = routing_service
 
         self.__current_route: SelectedPointCollection = SelectedPointCollection()
-        self.__active_profile = None
+        self.__active_profile: ActiveProfileDto | None = None
         self.__active_restriction_node_ids: list[int] = []
         self.__restriction_display_data: list[dict] = []
 
@@ -100,7 +100,7 @@ class MainWindowController(QObject):
         self.__routing_service.set_point_select_distance(self.__model.point_select_distance)
         snapped = self.__routing_service.snap_point_to_road(point)
         if not snapped:
-            self.__model.status_message = "error:snap"
+            self.__model.statusbar_message = "error:snap"
             return
 
         snapped_point, snap_info = snapped
@@ -110,7 +110,7 @@ class MainWindowController(QObject):
     @pyqtSlot(QgsPointXY, PointType, object)
     def on_add_route_point(self, qgs_point_xy: QgsPointXY, point_type: PointType, snap_info):
         if not self.__active_profile:
-            self.__model.status_message = "error:no_profile"
+            self.__model.statusbar_message = "error:no_profile"
             return
 
         if not isinstance(snap_info, dict):
@@ -121,7 +121,7 @@ class MainWindowController(QObject):
         fraction = snap_info.get("fraction")
 
         if node_id is None and edge_id is None:
-            self.__model.status_message = "error:no_node"
+            self.__model.statusbar_message = "error:no_node"
             return
 
         self.__current_route.add_point(
@@ -156,9 +156,9 @@ class MainWindowController(QObject):
         try:
             saved_path = self.__route_export_service.save_route(routes[route_index], self.__map_canvas)
             if saved_path:
-                self.__model.status_message = f"Маршрут сохранён: {saved_path}"
+                self.__model.statusbar_message = f"Маршрут сохранён: {saved_path}"
         except Exception as e:
-            self.__model.status_message = f"Ошибка сохранения маршрута: {e}"
+            self.__model.statusbar_message = f"Ошибка сохранения маршрута: {e}"
 
     def __try_build_routes(self):
         if not self.__current_route.has_required_points():
@@ -188,7 +188,7 @@ class MainWindowController(QObject):
 
         if not found_routes:
             Logger.info("Маршруты не найдены")
-            self.__model.status_message = "error:no_routes"
+            self.__model.statusbar_message = "error:no_routes"
             self.__model.routes = []
             self.routes_display_requested.emit([])
             return

@@ -329,7 +329,15 @@ class PluginCoordinator(QObject):
         self.__main_window_controller.set_map_layers(layers)
 
     def __provide_active_restriction_node_ids(self, profile):
-        node_ids = self.__restriction_service.get_active_restriction_node_ids(profile)
+        node_ids = []
+        temp_node_ids = self.__restriction_service.get_active_temp_restriction_node_ids()
+        dim_node_ids = self.__restriction_service.get_active_dimension_restriction_node_ids(profile.height, profile.width, profile.weight)
+        simple_node_ids = self.__restriction_service.get_active_simple_restriction_node_ids()
+
+        node_ids.extend(temp_node_ids)
+        node_ids.extend(dim_node_ids)
+        node_ids.extend(simple_node_ids)
+
         self.__main_window_controller.set_active_restriction_node_ids(node_ids)
 
     def __initialization_finished(self):
