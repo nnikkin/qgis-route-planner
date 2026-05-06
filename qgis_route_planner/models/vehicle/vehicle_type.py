@@ -1,8 +1,8 @@
 from enum import Enum
 
 class VehicleType(Enum):
-    CAR = dict(ru="Легковой", name="car")
-    TRUCK = dict(ru="Грузовой", name="truck")
+    CAR = "Легковой"
+    TRUCK = "Грузовой"
 
     @classmethod
     def from_value(cls, value: str):
