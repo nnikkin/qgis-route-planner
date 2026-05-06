@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/plugins/qgis_route_planner">
+    <file>png_resources/icon.png</file>
+    <file>png_resources/icons/arrow-move.png</file>
+    <file>png_resources/icons/marker.png</file>
+    <file>png_resources/icons/magnifier-zoom-in.png</file>
+    <file>png_resources/icons/magnifier-zoom-out.png</file>
+    <file>png_resources/icons/prohibition-button.png</file>
+  </qresource>
+</RCC>
