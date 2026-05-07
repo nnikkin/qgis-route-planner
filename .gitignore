@@ -213,8 +213,6 @@ help/source/
 ../pb_tool.cfg
 ../pylintrc
 ../Makerfile
-../qgis_route_planner.zip
+*.zip
 *.bat
-
-
 *.ui
