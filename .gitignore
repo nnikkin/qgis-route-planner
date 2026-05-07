@@ -213,6 +213,8 @@ help/source/
 ../pb_tool.cfg
 ../pylintrc
 ../Makerfile
-*.zip
 *.bat
 *.ui
+*.ps1
+*.zip
+*.qrc
