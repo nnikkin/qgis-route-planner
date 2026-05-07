@@ -1,9 +1,9 @@
 import os
 import qgis_route_planner.resources as resources
 
-from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator
+from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator, QTimer
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 from qgis_route_planner.controllers.init_dialogs_controller import InitDialogsController
 from qgis_route_planner.controllers.main_window_controller import MainWindowController
@@ -115,6 +115,7 @@ class QgisRoutePlanner:
             self.__settings_service
         )
         self.__settings_controller.reconnect_requested.connect(self.__reconnect_requested)
+        self.__settings_controller.graph_rebuild_requested.connect(self.__on_graph_rebuild_requested)
 
         self.__main_controller = MainWindowController(
             self.__settings_controller,
@@ -173,7 +174,7 @@ class QgisRoutePlanner:
 
         if self.__main_controller and self.__settings_controller:
             self.__main_controller.close_main_window()
-            self.__settings_controller.close_settings_window()
+            QTimer.singleShot(0, self.__settings_controller.close_settings_window)
 
         self.__init_repositories()
         self.__init_services()
@@ -195,6 +196,16 @@ class QgisRoutePlanner:
 
         self.first_start = True
         self.__init_dialogs_controller = None
+
+    def __on_graph_rebuild_requested(self):
+        try:
+            self.__main_controller.close_main_window()
+            self.__graph_repo.create_topology()
+            self.__main_controller.open_main_window()
+            self.__main_controller.initialize_map()
+            self.__settings_controller.close_settings_window()
+        except Exception as e:
+            QMessageBox.critical(None, "Ошибка", f"Не удалось перестроить граф:\n{e}", QMessageBox.Ok)
 
     def __on_reconnect_cancelled(self):
         pass
