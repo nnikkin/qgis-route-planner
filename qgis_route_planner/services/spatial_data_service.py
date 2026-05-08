@@ -57,5 +57,8 @@ class SpatialDataService:
 
     def run_init_database(self, layers: list[Layer], column_mapping=None):
         """Инициализация БД"""
-        self.__graph_repo.create_tables(layers, column_mapping)
-        self.__vehicle_repo.create_tables()
+        try:
+            self.__graph_repo.create_tables(layers, column_mapping)
+            self.__vehicle_repo.create_tables()
+        except Exception as e:
+            raise e

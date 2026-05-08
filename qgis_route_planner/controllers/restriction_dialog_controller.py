@@ -1,16 +1,17 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..data.restrictions import RestrictionRecord
+    from ..services import RestrictionService
+    from ..views import SettingsDialog
+
 from qgis.PyQt.QtCore import QObject, pyqtSignal, Qt
 from qgis.PyQt.QtWidgets import QListWidgetItem, QMessageBox
-
-from ..data.restrictions import RestrictionRecord
-from ..repositories import DbConnection
-from ..services import RestrictionService
-from ..views import SettingsDialog
-
 
 class RestrictionWindowController(QObject):
     """Контроллер окна ограничений"""
 
-    restriction_saved = pyqtSignal(DbConnection)
+    restriction_saved = pyqtSignal(object)
 
     def __init__(self, settings_dialog: SettingsDialog, restriction_service: RestrictionService):
         super().__init__()

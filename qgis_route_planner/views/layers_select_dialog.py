@@ -27,7 +27,7 @@ class LayersSelectDialog(QDialog):
 
         self.setupUi()
 
-    def __connect_signals_slots(self):
+    def __connect_signals(self):
         self.pushItemToTableButton.clicked.connect(self.__on_push_to_table_clicked)
         self.pushItemToListButton.clicked.connect(self.__on_push_to_list_clicked)
         self.buttonBox.accepted.connect(self.__on_accept)
@@ -133,7 +133,7 @@ class LayersSelectDialog(QDialog):
 
         self.retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_signals_slots()
+        self.__connect_signals()
 
     def retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
