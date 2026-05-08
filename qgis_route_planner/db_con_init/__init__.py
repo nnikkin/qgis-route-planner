@@ -1,3 +1,3 @@
 from .db_config_model import DbConfigModel
 from .db_init_controller import DbInitController
-from .conn_config_dialog import ConnectionConfigDialog
+from .con_config_dialog import ConnectionConfigDialog

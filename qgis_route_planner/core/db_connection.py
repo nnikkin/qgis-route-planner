@@ -113,4 +113,4 @@ class DbConnection:
         return all([self.host, self.port, self.database, self.username])
 
     def is_complete(self) -> bool:
-        return self.has_required_params and self.schema is not None
+        return self.has_required_params() and self.schema is not None

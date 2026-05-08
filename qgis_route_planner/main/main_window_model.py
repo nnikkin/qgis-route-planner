@@ -7,6 +7,7 @@ from qgis_route_planner.main.point_dto import RoutePointDto
 class MainWindowModel(QObject):
     """ Модель главного окна плагина PluginMainWindow """
     points_changed = pyqtSignal(list)
+    selected_point_id_changed = pyqtSignal(object)
 
     routes_changed = pyqtSignal(list)
     active_route_changed = pyqtSignal(int)
@@ -25,6 +26,7 @@ class MainWindowModel(QObject):
         super().__init__()
         self.__points: list[RoutePointDto] = []
         self.__routes: list[list[dict]] = []
+        self.__selected_point_id: int | None = None
         self.__active_route_index: int = 0
         self.__active_profile: ActiveProfileDto | None = None
         self.__point_select_distance: float = 10.0
@@ -52,6 +54,15 @@ class MainWindowModel(QObject):
     def routes(self, value: list[list[dict]]):
         self.__routes = value
         self.routes_changed.emit(self.__routes)
+
+    @property
+    def selected_point_id(self) -> int | None:
+        return self.__selected_point_id
+
+    @selected_point_id.setter
+    def selected_point_id(self, value: int | None):
+        self.__selected_point_id = value
+        self.selected_point_id_changed.emit(value)
 
     @property
     def active_route_index(self) -> int:

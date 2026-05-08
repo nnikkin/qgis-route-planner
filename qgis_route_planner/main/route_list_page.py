@@ -87,26 +87,62 @@ class RouteListPage(QWidget):
     def __generate_instructions(self) -> str:
         """ Генерирует текстовые инструкции по маршруту """
         if not self.__route:
-            return "<div>Нет инструкций</div>"
+            return "<div>Нечего отображать</div>"
+
+        route_segments = self.__group_segments(self.__route)
         instructions = []
         total_distance = 0
-        for i, edge in enumerate(self.__route):
-            total_distance += edge.get('length_m', 0)
-            distance_km = total_distance / 1000
+
+        for i, group in enumerate(route_segments):
+            seg_distance = route_segments.get('length_m', 0)
+            total_distance += seg_distance
+            name = route_segments.get("name", "Без названия")
+
             if i == 0:
                 action = "Старт"
-            elif i == len(self.__route) - 1:
+            elif i == len(route_segments) - 1:
                 action = "Финиш"
             else:
                 action = "Продолжать движение"
 
             instructions.append(f"""
-            <div>
-                <b>{i + 1}.</b> {action}<br>
-                <span font-size: 11px;">
-                    Проехать: {distance_km:.2f} км
+            <div style="margin-bottom: 6px;">
+                <b>{i + 1}.</b> {action} — {name}<br>
+                <span style="font-size: 11px; color: #555;">
+                    Участок: {seg_distance:.0f} м &nbsp;|&nbsp;
+                    Пройдено: {total_distance / 1000:.2f} км
                 </span>
             </div>
             """)
 
         return "".join(instructions)
+
+    def __group_segments(self, route: list[dict]) -> list[dict]:
+        """ Группирует последовательные сегменты с одинаковым названием улицы в один """
+        if not route:
+            return []
+
+        groups = []
+        current_group = {
+            "name": route[0].get("name", ""),
+            "length_m": route[0].get("length_m", 0),
+            "cost": route[0].get("cost", 0),
+        }
+
+        for edge in route[1:]:
+            edge_name = edge.get("name", ""),
+            edge_length = edge.get("length_m", 0)
+            edge_cost = edge.get("cost", 0)
+            if edge_name == current_group["name"]:
+                current_group["length_m"] += edge_length
+                current_group["cost"] += edge_cost
+            else:
+                groups.append(current_group)
+                current_group = {
+                    "name": edge_name,
+                    "length_m": edge_length,
+                    "cost": edge_cost,
+                }
+
+        groups.append(current_group)
+        return groups
