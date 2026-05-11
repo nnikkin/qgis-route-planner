@@ -46,12 +46,12 @@ class MapWidget(QgsMapCanvas):
         self.__btn_select_points_mode.setIcon(QIcon(QPixmap(":map_icons/map_add_point")))
         self.__btn_select_points_mode.setToolTip("Выбрать точки маршрута")
 
-        self.__btn_activate_restr_mode = QPushButton(self)
-        self.__btn_activate_restr_mode.setIcon(QIcon(QPixmap(":map_icons/map_restrict")))
-        self.__btn_activate_restr_mode.setToolTip("Задать ограничения")
+        self.__btn_open_restriction_dialog = QPushButton(self)
+        self.__btn_open_restriction_dialog.setIcon(QIcon(QPixmap(":map_icons/map_restrict")))
+        self.__btn_open_restriction_dialog.setToolTip("Задать ограничения")
 
         for btn in (self.__btn_zoom_in, self.__btn_pan_mode, self.__btn_zoom_out, self.__btn_select_points_mode,
-                    self.__btn_activate_restr_mode):
+                    self.__btn_open_restriction_dialog):
             btn.setFixedSize(30, 30)
             btn.setContentsMargins(0, 0, 0, 30)
             self.__btns_layout.addWidget(btn)
@@ -75,8 +75,8 @@ class MapWidget(QgsMapCanvas):
         return self.__btn_select_points_mode
 
     @property
-    def activate_restr_mode_btn(self):
-        return self.__btn_activate_restr_modeЫ
+    def open_restriction_dialog_btn(self):
+        return self.__btn_open_restriction_dialog
 
     def set_layers(self, layers: list):
         """Устанавливает слои на карту"""

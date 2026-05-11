@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from psycopg import sql
 
 from ..data.models.layer_config_model import Layer
@@ -54,7 +56,7 @@ class RoadGraphRepository:
         except Exception as e:
             print(e)
 
-    def __create_roadclass_table(self):
+    def __create_road_class_table(self):
         try:
             self.__db.execute_nonquery("""
                 CREATE TABLE IF NOT EXISTS routing.road_classes (
@@ -127,8 +129,6 @@ class RoadGraphRepository:
 
     def __fill_avg_speed(self):
         try:
-
-            # Временно, посмотреть Постановление Правительства РФ от 23.10.1993 N 1090 (ред. от 16.07.2025)?
             self.__db.execute_nonquery("""
                 UPDATE routing.graph_edges e
                 SET avg_speed_estimated = CASE
@@ -234,7 +234,7 @@ class RoadGraphRepository:
                 self.__db.execute_nonquery(cmd)
 
             self.__create_nodes_table()
-            self.__create_roadclass_table()
+            self.__create_road_class_table()
             self.__create_edges_table()
             self.__insert_edges_from_mapping(layers, column_mapping)
 
@@ -427,43 +427,64 @@ class RoadGraphRepository:
             print(e)
             return False
 
-    def __pgr_ksp(self, start_id: int, end_id: int, k: int, profile: VehicleProfile):
+    def __pgr_ksp(
+            self,
+            start_id: int,
+            end_id: int,
+            k: int,
+            profile: VehicleProfile,
+            restriction_nodes: list = None):
+        restriction_condition = ""
+        if restriction_nodes:
+            restriction_condition = f"""
+            AND source NOT IN ({','.join(map(str, restriction_nodes))})
+            AND target NOT IN ({','.join(map(str, restriction_nodes))})
+            """
+
         sql_inner_query = f"""
-                    SELECT edge_id as id, source, target, 
-                           CASE 
-                               WHEN max_height IS NOT NULL AND max_height < {profile.height_m} THEN -1
-                               ELSE cost 
-                           END as cost,
-                           CASE 
-                               WHEN max_height IS NOT NULL AND max_height < {profile.height_m} THEN -1
-                               ELSE reverse_cost 
-                           END as reverse_cost
-                    FROM routing.graph_edges
-                    {"WHERE hgv IS NOT FALSE" if profile.type.lower() == 'truck' else ""}
-                """
+                SELECT edge_id as id, source, target, 
+                       CASE 
+                           WHEN max_height IS NOT NULL AND max_height < {profile.height_m} THEN -1
+                           ELSE cost 
+                       END as cost,
+                       CASE 
+                           WHEN max_height IS NOT NULL AND max_height < {profile.height_m} THEN -1
+                           ELSE reverse_cost 
+                       END as reverse_cost
+                FROM routing.graph_edges
+                {"WHERE hgv IS NOT FALSE" if profile.type.lower() == 'truck' else "WHERE 1=1"}
+                {restriction_condition}
+            """
         return self.__db.execute_query(
             """
-                    SELECT 
-                        r.path_id, 
-                        e.edge_id, 
-                        ST_AsText(e.geom) AS geom,
-                        r.cost,
-                        r.agg_cost,
-                        e.length_m
-                    FROM pgr_ksp(
-                        %s::text,
-                        %s::bigint, 
-                        %s::bigint, 
-                        %s::integer,
-                        directed := true
-                    ) AS r
-                    JOIN routing.graph_edges AS e ON r.edge = e.edge_id
-                    ORDER BY r.path_id, r.seq
-                """,
+            SELECT 
+                r.path_id, 
+                e.edge_id, 
+                ST_AsText(e.geom) AS geom,
+                r.cost,
+                r.agg_cost,
+                e.length_m
+            FROM pgr_ksp(
+                %s::text,
+                %s::bigint, 
+                %s::bigint, 
+                %s::integer,
+                directed := true
+            ) AS r
+            JOIN routing.graph_edges AS e ON r.edge = e.edge_id
+            ORDER BY r.path_id, r.seq
+            """,
             sql_inner_query, start_id, end_id, k
         )
 
-    def get_routes(self, start_id: int, end_id: int, profile: VehicleProfile, waypoint_ids: list[int] = None, routes_n: int = 3) -> list[list[dict]] | None:
+    def get_routes(
+            self,
+            start_id: int,
+            end_id: int,
+            profile: VehicleProfile,
+            waypoint_ids: list[int] = None,
+            restriction_nodes: list[int] = None,
+            routes_n: int = 3) -> list[list[dict]] | None:
         """
         Находит пути из точки start_id в end_id, с промежуточными остановками в waypoint_ids
         routes_n задаёт максимальное число путей, которые надо найти
@@ -476,7 +497,7 @@ class RoadGraphRepository:
 
         try:
             if waypoint_ids is None or len(waypoint_ids) == 0:
-                rows = self.__pgr_ksp(start_id, end_id, routes_n, profile)
+                rows = self.__pgr_ksp(start_id, end_id, routes_n, profile, restriction_nodes)
 
                 # Группируем  по path_id
                 routes = {}

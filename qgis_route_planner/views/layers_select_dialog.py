@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
-from qgis.PyQt.QtWidgets import QMessageBox, QDialog
 
+from ..views import MessageBoxMixin
 from ..controllers import InitDialogsController
 from ..data.models import LayerConfigModel
 from ..data.models.layer_config_model import Layer
 from ..utils import GeometryType, LayerRole
 
 
-class LayersSelectDialog(QDialog):
+class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
     """Диалоговое окно выбора слоя для обработки"""
 
     def __init__(
@@ -27,7 +27,7 @@ class LayersSelectDialog(QDialog):
 
         self.setupUi()
 
-    def __connect_signals(self):
+    def __connect(self):
         self.pushItemToTableButton.clicked.connect(self.__on_push_to_table_clicked)
         self.pushItemToListButton.clicked.connect(self.__on_push_to_list_clicked)
         self.buttonBox.accepted.connect(self.__on_accept)
@@ -133,7 +133,7 @@ class LayersSelectDialog(QDialog):
 
         self.retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
-        self.__connect_signals()
+        self.__connect()
 
     def retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
@@ -154,14 +154,11 @@ class LayersSelectDialog(QDialog):
             self.__fill_list()
 
     def closeEvent(self, event, **kwargs):
-        close_question = QMessageBox.question(
-            self,
-            "Внимание",
+        close_question = self._show_question(
             "Для продолжения требуется выбрать таблицу.\nВы уверены, что хотите закрыть мастер подключения?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "Внимание"
         )
-        if close_question == QMessageBox.Yes:
+        if close_question:
             self.__controller.initialization_cancelled()
             event.accept()
         else:
@@ -170,7 +167,7 @@ class LayersSelectDialog(QDialog):
     def __on_push_to_table_clicked(self):
         selected_item = self.listWidget.currentItem()
         if not selected_item:
-            QMessageBox.warning(self, "Ошибка", "Выберите значение из списка слева.", QMessageBox.Ok)
+            self._show_warning("Выберите значение из списка слева.")
             return
         layer_name = selected_item.text()
         self.__controller.add_layer_to_config(layer_name, GeometryType.LINESTRING, LayerRole.ROADS)
@@ -179,7 +176,7 @@ class LayersSelectDialog(QDialog):
         selected_rows = self.tableWidget.selectionModel().selectedRows()
 
         if not selected_rows:
-            QMessageBox.warning(self, "Ошибка", "Выберите строку в таблице справа.", QMessageBox.Ok)
+            self._show_warning("Выберите строку в таблице справа.")
             return
 
         self.__controller.remove_layer_from_config(selected_rows[0].row())
@@ -189,7 +186,7 @@ class LayersSelectDialog(QDialog):
 
     @pyqtSlot(str)
     def __on_layer_selection_failed(self, message: str):
-        QMessageBox.warning(self, "Ошибка", message, QMessageBox.Ok)
+        self._show_warning(message)
 
     def __on_combobox_geom_changed(self, row, text):
         geom_type = GeometryType.from_value(text)

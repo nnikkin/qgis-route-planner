@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qgis.PyQt.QtCore import QObject, pyqtSignal, pyqtSlot
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 
 if TYPE_CHECKING:
     from ..data.models import SettingsModel, FormMode
@@ -11,15 +11,13 @@ if TYPE_CHECKING:
 
 from ..data.models import FormMode
 from ..data.vehicle import VehicleProfile
+from ..controllers import BaseController
 
 
-class SettingsWindowController(QObject):
+class SettingsDialogController(BaseController):
     """Контроллер окна настроек"""
 
     open_page_requested = pyqtSignal(int)
-    show_error = pyqtSignal(str)
-    show_warning = pyqtSignal(str)
-    show_info = pyqtSignal(str)
     request_delete_confirmation = pyqtSignal(str, bool)
 
     reconnect_requested = pyqtSignal()
