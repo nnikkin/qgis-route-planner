@@ -1,4 +1,4 @@
-from ..data.restrictions import RestrictionRecord
+from ..data.route import RestrictionRecord
 from ..repositories import DbConnection
 
 
@@ -7,64 +7,69 @@ class RestrictionRepository:
         self.__db = db
 
     def create_tables(self):
-        self.__db.execute_nonquery(
-            """
+        """Создаёт все нужные таблицы"""
+        self.__db.execute_nonquery("""
             CREATE TABLE IF NOT EXISTS routing.restriction_types (
                 restriction_type_id SMALLINT PRIMARY KEY,
-                code TEXT,
-                name TEXT
+                code TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL
             )
-            """
-        )
-        '''self.__db.execute_nonquery(
-            """
-            CREATE TABLE IF NOT EXISTS routing.restriction_info (
-                restriction_info_id BIGINT PRIMARY KEY,
-                valid_from_date DATE,
-                valid_from_time TIME,
-                valid_to_date DATE,
-                valid_to_time TIME,
-                comment TEXT
-            )
-            """
-        )'''
-        self.__db.execute_nonquery(
-            """
-            CREATE TABLE IF NOT EXISTS routing.restrictions (
-                restriction_id BIGINT PRIMARY KEY,
-                restriction_type_id SMALLINT REFERENCES routing.restriction_types(restriction_type_id),
-                node_id BIGINT,
-                value_num DOUBLE PRECISION,
-                value_text TEXT
-            )
-            """
-        )
-        self.__db.execute_nonquery(
-            """
-            CREATE TABLE IF NOT EXISTS routing.turn_restrictions (
-                restriction_id BIGINT PRIMARY KEY,
-                via_node_id BIGINT,
-                to_edge_id BIGINT,
-                restriction_info_id BIGINT REFERENCES routing.restriction_info(restriction_info_id)
-            )
-            """
-        )
+        """)
 
-    def __next_id(self, table_name: str, column_name: str) -> int:
+        self.__db.execute_nonquery("""
+            CREATE TABLE IF NOT EXISTS routing.restrictions (
+                restriction_id      BIGINT PRIMARY KEY,
+                restriction_type_id SMALLINT REFERENCES routing.restriction_types(restriction_type_id),
+                name                TEXT,
+                node_id             BIGINT,
+                value_num           DOUBLE PRECISION,
+                value_text          TEXT,
+                comment             TEXT DEFAULT ''
+            )
+        """)
+
+        for col, definition in [
+            ("name", "TEXT"),
+            ("comment", "TEXT DEFAULT ''"),
+        ]:
+            try:
+                self.__db.execute_nonquery(
+                    f"ALTER TABLE routing.restrictions ADD COLUMN IF NOT EXISTS {col} {definition}"
+                )
+            except Exception:
+                pass
+
+    def ensure_default_types(self):
+        """Создаёт таблицы и заполняет справочник типов"""
+        self.create_tables()
+
+        existing = {row[0] for row in self.get_types()}
+        defaults = [
+            (1, "simple", "Простое"),
+            (2, "dimension", "Габаритное"),
+            (3, "temporary", "Временное"),
+        ]
+        for type_id, code, name in defaults:
+            if type_id in existing:
+                continue
+            self.__db.execute_nonquery(
+                """
+                INSERT INTO routing.restriction_types
+                    (restriction_type_id, code, name)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (restriction_type_id) DO NOTHING
+                """,
+                type_id, code, name,
+            )
+
+    def __next_id(self) -> int:
         rows = self.__db.execute_query(
-            f"SELECT COALESCE(MAX({column_name}), 0) + 1 AS next_id FROM {table_name}"
+            "SELECT COALESCE(MAX(restriction_id), 0) + 1 FROM routing.restrictions"
         )
         return int(rows[0][0]) if rows else 1
 
-    def ensure_schema(self):
-        self.create_tables()
-        self.__db.execute_nonquery(
-            "ALTER TABLE routing.restrictions ADD COLUMN IF NOT EXISTS name TEXT"
-        )
-
     def get_all(self) -> list[dict]:
-        return self.__db.execute_query(
-            """
+        rows = self.__db.execute_query("""
             SELECT
                 r.restriction_id AS id,
                 r.restriction_type_id,
@@ -74,15 +79,13 @@ class RestrictionRepository:
                 r.node_id,
                 r.value_num,
                 r.value_text,
-                COALESCE(ri.comment, '') AS comment
+                COALESCE(r.comment, '') AS comment
             FROM routing.restrictions r
             LEFT JOIN routing.restriction_types t
-                ON t.restriction_type_id = r.restriction_type_id
-            LEFT JOIN routing.restriction_info ri
-                ON ri.restriction_info_id = r.restriction_info_id
+                USING (restriction_type_id)
             ORDER BY r.restriction_id DESC
-            """
-        )
+        """)
+        return [self.__row_to_dict(row) for row in rows]
 
     def get_by_id(self, restriction_id: int) -> dict | None:
         rows = self.__db.execute_query(
@@ -96,120 +99,61 @@ class RestrictionRepository:
                 r.node_id,
                 r.value_num,
                 r.value_text,
-                COALESCE(ri.comment, '') AS comment
+                COALESCE(r.comment, '') AS comment
             FROM routing.restrictions r
             LEFT JOIN routing.restriction_types t
-                ON t.restriction_type_id = r.restriction_type_id
-            LEFT JOIN routing.restriction_info ri
-                ON ri.restriction_info_id = r.restriction_info_id
+                USING (restriction_type_id)
             WHERE r.restriction_id = %s
             """,
-            [restriction_id],
+            restriction_id,
         )
-        return rows[0] if rows else None
+        return self.__row_to_dict(rows[0]) if rows else None
 
     def add_restriction(self, restriction: RestrictionRecord):
-        info_id = None
-        if restriction.comment:
-            info_id = self.__next_id("routing.restriction_info", "restriction_info_id")
-            self.__db.execute_nonquery(
-                """
-                INSERT INTO routing.restriction_info (
-                    restriction_info_id,
-                    comment
-                ) VALUES (%s, %s)
-                """,
-                [info_id, restriction.comment],
-            )
-
-        restriction_id = self.__next_id("routing.restrictions", "restriction_id")
         self.__db.execute_nonquery(
             """
-            INSERT INTO routing.restrictions (
-                restriction_id,
-                restriction_type_id,
-                restriction_info_id,
-                name,
-                node_id,
-                value_num,
-                value_text
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO routing.restrictions
+                (restriction_id, restriction_type_id, name,
+                 node_id, value_num, value_text, comment)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            [
-                restriction_id,
-                restriction.restriction_type_id,
-                info_id,
-                restriction.name,
-                restriction.node_id,
-                restriction.value_num,
-                restriction.value_text,
-            ],
+            self.__next_id(),
+            restriction.restriction_type_id,
+            restriction.name,
+            restriction.node_id,
+            restriction.value_num,
+            restriction.value_text,
+            restriction.comment or "",
         )
 
     def upd_restriction(self, restriction_id: int, restriction: RestrictionRecord):
-        current = self.get_by_id(restriction_id)
-        info_id = None
-        if current:
-            info_id = current.get("restriction_info_id")
-
-        if restriction.comment:
-            if info_id is None:
-                info_id = self.__next_id("routing.restriction_info", "restriction_info_id")
-                self.__db.execute_nonquery(
-                    """
-                    INSERT INTO routing.restriction_info (
-                        restriction_info_id,
-                        comment
-                    ) VALUES (%s, %s)
-                    """,
-                    [info_id, restriction.comment],
-                )
-            else:
-                self.__db.execute_nonquery(
-                    """
-                    UPDATE routing.restriction_info
-                    SET comment = %s
-                    WHERE restriction_info_id = %s
-                    """,
-                    [restriction.comment, info_id],
-                )
-
         self.__db.execute_nonquery(
             """
             UPDATE routing.restrictions
             SET restriction_type_id = %s,
-                restriction_info_id = %s,
                 name = %s,
                 node_id = %s,
                 value_num = %s,
-                value_text = %s
+                value_text = %s,
+                comment = %s
             WHERE restriction_id = %s
             """,
-            [
-                restriction.restriction_type_id,
-                info_id,
-                restriction.name,
-                restriction.node_id,
-                restriction.value_num,
-                restriction.value_text,
-                restriction_id,
-            ],
+            restriction.restriction_type_id,
+            restriction.name,
+            restriction.node_id,
+            restriction.value_num,
+            restriction.value_text,
+            restriction.comment or "",
+            restriction_id,
         )
 
     def del_restriction(self, restriction_id: int):
-        current = self.get_by_id(restriction_id)
-        if current and current.get("restriction_info_id"):
-            self.__db.execute_nonquery(
-                "DELETE FROM routing.restriction_info WHERE restriction_info_id = %s",
-                [current["restriction_info_id"]],
-            )
-
         self.__db.execute_nonquery(
             "DELETE FROM routing.restrictions WHERE restriction_id = %s",
-            [restriction_id],
+            restriction_id
         )
 
-    def get_types(self) -> list[dict]:
+    def get_types(self) -> list:
         return self.__db.execute_query(
             """
             SELECT restriction_type_id, code, name
@@ -218,25 +162,16 @@ class RestrictionRepository:
             """
         )
 
-    def ensure_default_types(self):
-        self.ensure_schema()
-        existing = self.get_types()
-        if existing:
-            return
-
-        defaults = [
-            (1, "dimension", "Габаритное"),
-            (2, "temporary", "Временное")
-        ]
-
-        for restriction_type_id, code, name in defaults:
-            self.__db.execute_nonquery(
-                """
-                INSERT INTO routing.restriction_types (
-                    restriction_type_id,
-                    code,
-                    name
-                ) VALUES (%s, %s, %s)
-                """,
-                [restriction_type_id, code, name],
-            )
+    @staticmethod
+    def __row_to_dict(row) -> dict:
+        return {
+            "id": row[0],
+            "restriction_type_id": row[1],
+            "restriction_type_code": row[2],
+            "restriction_type_name": row[3],
+            "name": row[4],
+            "node_id": row[5],
+            "value_num": row[6],
+            "value_text": row[7],
+            "comment": row[8],
+        }

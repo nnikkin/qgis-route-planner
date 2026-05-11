@@ -1,17 +1,15 @@
 from __future__ import annotations
-
 from typing import TYPE_CHECKING
-
-from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
-
 if TYPE_CHECKING:
     from ..data.models import SettingsModel, FormMode
     from ..services import SettingsService
     from ..data.vehicle import VehicleType, VehicleProfile
 
-from ..data.models import FormMode
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
+
+from ..utils import FormMode
 from ..data.vehicle import VehicleProfile
-from ..controllers import BaseController
+from .base_controller import BaseController
 
 
 class SettingsDialogController(BaseController):
@@ -22,6 +20,8 @@ class SettingsDialogController(BaseController):
 
     reconnect_requested = pyqtSignal()
     graph_rebuild_requested = pyqtSignal()
+
+    active_profile_changed = pyqtSignal(object)
 
     def __init__(
             self,
@@ -193,7 +193,7 @@ class SettingsDialogController(BaseController):
                 return
 
             if len(self.__model.profiles)-1 <= 0:
-                raise BaseException("Нельзя удалить единственный зарегистрированный профиль")
+                self.show_error.emit("Нельзя удалить единственный зарегистрированный профиль")
 
             is_active = profile_id == self.__model.active_profile_id
             if is_active:
@@ -218,15 +218,17 @@ class SettingsDialogController(BaseController):
             return
 
         if self.__model.active_profile_id == profile_id:
+            print(f"self.__model.active_profile_id == profile_id {self.__model.active_profile_id == profile_id}")
             return
 
         try:
             self.__service.set_active_profile_id(profile_id)
             self.__model.active_profile_id = profile_id
+
+            current_profile = self.__model.current_profile_data
+            if current_profile:
+                self.active_profile_changed.emit(current_profile)
+
             self.show_info.emit("Активный профиль изменен")
         except Exception as e:
             self.show_error.emit(f"Ошибка установки активного профиля: {e}")
-
-    def get_active_profile_id(self) -> int:
-        """Получить ID активного профиля"""
-        return self.__model.active_profile_id

@@ -1,9 +1,13 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..data.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel
+    from ..services import SpatialDataService
+    from ..utils import ColumnRole, GeometryType, LayerRole
+
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 
-from . import BaseController
-from ..data.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel
-from ..utils import ColumnRole, GeometryType, LayerRole
-from ..services import SpatialDataService
+from .base_controller import BaseController
 
 
 class InitDialogsController(BaseController):

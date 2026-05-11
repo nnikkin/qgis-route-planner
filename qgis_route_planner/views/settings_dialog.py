@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..controllers import SettingsDialogController
+    from ..data.models import SettingsModel
+    from ..data.vehicle import VehicleProfile
+
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
-from ..views import MessageBoxMixin
-from ..controllers import SettingsDialogController
-from ..data.models import SettingsModel, FormMode
-from ..data.vehicle import VehicleProfile, VehicleType
+from .message_box_mixin import MessageBoxMixin
+from ..utils import FormMode
+from ..data.vehicle import VehicleType
 
 
 class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -28,9 +34,9 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         """Подключение сигналов от контроллера и виджетов"""
         # Сигналы от контроллера к view
         self.__controller.open_page_requested.connect(self.__open_dialog)
-        self.__controller.show_error.connect(self.__show_error)
-        self.__controller.show_warning.connect(self.__show_warning)
-        self.__controller.show_info.connect(self.__show_info)
+        self.__controller.show_error.connect(self._show_error)
+        self.__controller.show_warning.connect(self._show_warning)
+        self.__controller.show_info.connect(self._show_info)
         self.__controller.request_delete_confirmation.connect(self.__confirm_delete_profile)
 
         # Сигналы от модели к view
