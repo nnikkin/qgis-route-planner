@@ -18,7 +18,7 @@ class SettingsDialogController(QObject):
     """ Контроллер окна настроек """
 
     open_page_requested = pyqtSignal(int)
-    request_delete_confirmation = pyqtSignal(str, bool)
+    request_delete_confirmation = pyqtSignal(str)
 
     reconnect_requested = pyqtSignal()
     graph_rebuild_requested = pyqtSignal()
@@ -77,6 +77,8 @@ class SettingsDialogController(QObject):
         try:
             self.__model.profiles = self.__profile_provider.get_profiles()
             self.__model.active_profile_id = self.__service.get_active_profile_id()
+            self.__model.current_profile_id = self.__model.active_profile_id
+            self.set_active_profile()
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профилей ТС: {e}")
 
@@ -208,7 +210,7 @@ class SettingsDialogController(QObject):
             return
 
         if not name or not name.strip():
-            self.show_warning.emit("Введите название профиля!")
+            self.show_warning.emit("Введите название профиля.")
             return
 
         try:
@@ -223,14 +225,10 @@ class SettingsDialogController(QObject):
             self.__model.current_profile_id = profile.id
 
             if mode == FormMode.CREATE:
-                # Создание нового профиля
-                self.show_info.emit("Профиль успешно создан!")
-            else:
-                # Обновление существующего
+                self.set_active_profile()
+            if mode == FormMode.EDIT:
                 self.__profile_provider.update_profile(self.__model.current_profile_id, profile)
-                self.show_info.emit("Профиль успешно обновлен!")
 
-            # Обновить список профилей
             self.__load_profiles()
             self.__load_current_profile_data()
             self.__model.editing_mode = FormMode.VIEW
@@ -251,11 +249,10 @@ class SettingsDialogController(QObject):
                 return
 
             is_active = profile_id == self.__model.active_profile_id
-            self.request_delete_confirmation.emit(profile.name, is_active)
+            self.request_delete_confirmation.emit(profile.name)
         except Exception as e:
             self.show_error.emit(f"Ошибка при запросе удаления профиля: {e}")
 
-    @pyqtSlot()
     def confirm_delete_profile(self):
         """ Подтвержденное удаление профиля """
         try:
@@ -263,8 +260,13 @@ class SettingsDialogController(QObject):
             if profile_id is None:
                 return
 
-            if len(self.__model.profiles)-1 <= 0:
-                self.show_error.emit("Нельзя удалить единственный зарегистрированный профиль")
+            if len(self.__model.profiles) - 1 <= 0:
+                self.show_error.emit("Нельзя удалить единственный зарегистрированный профиль.")
+                return
+
+            if self.__model.current_profile_id == profile_id:
+                self.show_error.emit("Нельзя удалить активный профиль.\nСначала выберите и установите как активный другой профиль.")
+                return
 
             is_active = profile_id == self.__model.active_profile_id
             if is_active:
@@ -281,14 +283,15 @@ class SettingsDialogController(QObject):
         except Exception as e:
             self.show_error.emit(f"Ошибка удаления профиля: {e}")
 
-    @pyqtSlot()
     def set_active_profile(self):
         """ Установить текущий профиль как активный """
         profile_id = self.__model.current_profile_id
         if profile_id is None:
+            self.show_info("profile_id is None")
             return
 
         if self.__model.active_profile_id == profile_id:
+            self.show_info("self.__model.active_profile_id == profile_id")
             return
 
         try:
@@ -298,7 +301,5 @@ class SettingsDialogController(QObject):
             current_profile = self.__model.current_profile_data
             if current_profile:
                 self.active_profile_changed.emit(current_profile)
-
-            self.show_info.emit("Активный профиль изменен")
         except Exception as e:
             self.show_error.emit(f"Ошибка установки активного профиля: {e}")

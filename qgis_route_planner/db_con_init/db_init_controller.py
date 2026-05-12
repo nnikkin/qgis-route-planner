@@ -22,49 +22,52 @@ class DbInitController(QObject):
 
     def __init__(self, model: DbConfigModel):
         super().__init__()
-        self.__db_config_model: DbConfigModel = model
+        self.__model: DbConfigModel = model
 
     def cancel_initialization(self):
         self.initialization_cancelled.emit()
 
     def request_connection_test(self):
         self.con_test_requested.emit(
-            self.__db_config_model.host,
-            self.__db_config_model.port,
-            self.__db_config_model.username,
-            self.__db_config_model.password,
-            self.__db_config_model.database
+            self.__model.host,
+            self.__model.port,
+            self.__model.username,
+            self.__model.password,
+            self.__model.database
         )
 
     @pyqtSlot(str)
     def change_host_value(self, new_value: str):
-        self.__db_config_model.host = new_value
+        self.__model.host = new_value
 
     @pyqtSlot(str)
     def change_port_value(self, new_value: str):
-        self.__db_config_model.port = new_value
+        self.__model.port = new_value
 
     @pyqtSlot(str)
     def change_username_value(self, new_value: str):
-        self.__db_config_model.username = new_value
+        self.__model.username = new_value
 
     @pyqtSlot(str)
     def change_password_value(self, new_value: str):
-        self.__db_config_model.password = new_value
+        self.__model.password = new_value
+
+    def change_password_visibility(self):
+        self.__model.is_password_visible = not self.__model.is_password_visible
 
     @pyqtSlot(str)
     def change_database_value(self, new_value: str):
-        self.__db_config_model.database = new_value
+        self.__model.database = new_value
 
     @pyqtSlot(str)
     def change_schema_value(self, new_value: str):
-        self.__db_config_model.schema = new_value
+        self.__model.schema = new_value
 
     def validate_values_for_schema(self):
-        return self.__db_config_model.validate_values_for_schema()
+        return self.__model.validate_values_for_schema()
 
     def validate_connection_step(self):
-        return self.__db_config_model.validate_all_values()
+        return self.__model.validate_all_values()
 
     def connection_step_finish(self):
         self.con_params_obtained.emit()

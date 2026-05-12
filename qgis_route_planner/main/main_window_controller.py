@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 from qgis_route_planner.routing.selected_point_collection import SelectedPointCollection
 from qgis_route_planner.routing.point_type import PointType
 from qgis_route_planner.main.active_profile_dto import ActiveProfileDto
-from qgis_route_planner.main.point_dto import RoutePointDto
 from qgis_route_planner.main.route_export_service import RouteExportService
 
 from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal, QObject
@@ -117,9 +116,6 @@ class MainWindowController(QObject):
             self.__model.statusbar_message = "error:no_profile"
             return
 
-        if not isinstance(snap_info, dict):
-            snap_info = {"node_id": snap_info}
-
         node_id = snap_info.get("node_id")
         edge_id = snap_info.get("edge_id")
         fraction = snap_info.get("fraction")
@@ -132,10 +128,9 @@ class MainWindowController(QObject):
             qgs_point_xy, point_type, node_id,
             edge_id=edge_id, fraction=fraction
         )
-        route_point = self.__current_route.get_point(idx - 1)
-
+        route_point = self.__current_route.get_point(idx)
         self.__model.points = [
-            self.__route_point_to_dto(point)
+            self.__model.route_point_to_dto(point)
             for point in self.__current_route.points
         ]
         self.point_marker_add_requested.emit(route_point)
@@ -181,7 +176,7 @@ class MainWindowController(QObject):
     def __sync_points_and_rebuild(self):
         """ Обновить модель и пересчитать маршрут """
         self.__model.points = [
-            self.__route_point_to_dto(p)
+            self.__model.route_point_to_dto(p)
             for p in self.__current_route.points
         ]
 
@@ -207,8 +202,6 @@ class MainWindowController(QObject):
 
     def __try_build_routes(self):
         if not self.__current_route.has_required_points():
-            self.__model.routes = []
-            self.routes_display_requested.emit([])
             return
 
         point_ids = self.__current_route.get_routing_node_ids()
@@ -223,7 +216,6 @@ class MainWindowController(QObject):
 
         p1 = f"Запрошено построение маршрутов из точки {start_node_id} в точку {end_node_id}"
         p2 = f" с промежуточными точками {waypoint_ids}" if waypoint_ids else ""
-
         Logger.info(p1 + p2)
 
         found_routes = self.__routing_service.calculate_routes(
@@ -247,7 +239,7 @@ class MainWindowController(QObject):
     def update_active_profile(self, profile):
         """ Обновляет активный профиль в модели главного окна """
         self.__active_profile = profile
-        self.__model.active_profile = self.__profile_to_dto(profile)
+        self.__model.active_profile = self.__model.profile_to_dto(profile)
 
     @pyqtSlot(list)
     def set_active_restriction_node_ids(self, node_ids: list[int]):
@@ -308,23 +300,3 @@ class MainWindowController(QObject):
             })
 
         self.restrict_points_display_requested.emit(restriction_points)
-
-    @staticmethod
-    def __route_point_to_dto(route_point) -> RoutePointDto:
-        return RoutePointDto(
-            id=route_point.id,
-            point_type=route_point.point_type,
-            order=route_point.order,
-            x=route_point.qgs_point_xy.x(),
-            y=route_point.qgs_point_xy.y(),
-            node_id=route_point.node_id,
-        )
-
-    @staticmethod
-    def __profile_to_dto(profile) -> ActiveProfileDto | None:
-        if profile is None:
-            return None
-        return ActiveProfileDto(
-            id=getattr(profile, "id", None),
-            name=getattr(profile, "name", ""),
-        )

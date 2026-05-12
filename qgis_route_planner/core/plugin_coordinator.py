@@ -284,7 +284,7 @@ class PluginCoordinator(QObject):
         try:
             self.__db_connection.schema = self.__db_config_model.schema
 
-            if self.__main_window_controller and self.__settings_controller:
+            if self.__main_window and self.__settings_dialog:
                 self.__main_window.close()
                 self.__settings_dialog.close()
 

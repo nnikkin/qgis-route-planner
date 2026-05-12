@@ -20,31 +20,20 @@ class SelectedPointCollection:
     def get_routing_node_ids(self) -> list[int]:
         return [p.node_id for p in self.__points]
 
+    def has_start(self):
+        return any(p.point_type == PointType.START for p in self.__points)
+
+    def has_end(self):
+        return any(p.point_type == PointType.END for p in self.__points)
+
     def has_required_points(self) -> bool:
-        has_start = any(p.point_type == PointType.START for p in self.__points)
-        has_end = any(p.point_type == PointType.END for p in self.__points)
-        return has_start and has_end
+        return self.has_start() and self.has_end()
 
     def __index_of(self, point_id: int) -> int:
         for i, p in enumerate(self.__points):
             if p.id == point_id:
                 return i
         return -1
-
-    def __reassign_endpoint_types(self):
-        if not self.__points:
-            return
-
-        waypoint_order = 1
-        for i, p in enumerate(self.__points):
-            if i == 0:
-                p.point_type = PointType.START
-            elif i == len(self.__points) - 1 and len(self.__points) > 1:
-                p.point_type = PointType.END
-            else:
-                p.point_type = PointType.WAYPOINT
-                p.order = waypoint_order
-                waypoint_order += 1
 
     def add_point(
             self,
@@ -63,7 +52,7 @@ class SelectedPointCollection:
             point_type=point_type,
             node_id=node_id,
             edge_id=edge_id,
-            fraction=fraction,
+            fraction=fraction
         )
 
         self.__next_point_id += 1
@@ -73,14 +62,17 @@ class SelectedPointCollection:
         elif point_type == PointType.START:
             self.__points.insert(0, route_point)
         else:
-            end_idx = next((i for i, p in enumerate(self.__points) if p.point_type == PointType.END), None)
-            if end_idx is not None:
-                self.__points.insert(end_idx, route_point)
-            else:
+            if self.has_start() and not self.has_end():
                 self.__points.append(route_point)
+            else:
+                self.__points.insert(-1, route_point)
 
-        self.__reassign_endpoint_types()
+        self.__reorder()
         return route_point.id
+
+    def __reorder(self):
+        for i, point in enumerate(self.__points):
+            point.order = i
 
     def remove_point(self, point_id: int) -> bool:
         idx = self.__index_of(point_id)
@@ -88,7 +80,7 @@ class SelectedPointCollection:
             return False
 
         self.__points.pop(idx)
-        self.__reassign_endpoint_types()
+        self.__reorder()
         return True
 
     def move_up(self, point_id: int) -> bool:
@@ -97,13 +89,13 @@ class SelectedPointCollection:
         if idx <= 0:
             return False
 
-        self.__points[idx].order, self.__points[idx - 1].order = (
-            self.__points[idx - 1].order, self.__points[idx].order
+        self.__points[idx].point_type, self.__points[idx - 1].point_type = (
+            self.__points[idx - 1].point_type, self.__points[idx].point_type
         )
         self.__points[idx - 1], self.__points[idx] = (
             self.__points[idx], self.__points[idx - 1]
         )
-        self.__reassign_endpoint_types()
+        self.__reorder()
         return True
 
     def move_down(self, point_id: int) -> bool:
@@ -112,13 +104,13 @@ class SelectedPointCollection:
         if idx < 0 or idx >= len(self.__points) - 1:
             return False
 
-        self.__points[idx].order, self.__points[idx + 1].order = (
-            self.__points[idx + 1].order, self.__points[idx].order
+        self.__points[idx].point_type, self.__points[idx + 1].point_type = (
+            self.__points[idx + 1].point_type, self.__points[idx].point_type
         )
         self.__points[idx], self.__points[idx + 1] = (
             self.__points[idx + 1], self.__points[idx]
         )
-        self.__reassign_endpoint_types()
+        self.__reorder()
         return True
 
     def clear(self):

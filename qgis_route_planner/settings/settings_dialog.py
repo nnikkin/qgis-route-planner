@@ -496,11 +496,10 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__tabWidget.setCurrentIndex(page_index)
         self.show()
 
-    def __confirm_delete_profile(self, profile_name: str, is_active: bool):
+    def __confirm_delete_profile(self, profile_name: str):
         """ Показать диалог подтверждения удаления профиля """
-        msg = "Вы пытаетесь удалить активный профиль.\n" if is_active else ""
         confirm_delete = self._show_question(
-            f"{msg}Вы уверены, что хотите удалить профиль '{profile_name}'?",
+            f"Вы уверены, что хотите удалить профиль '{profile_name}'?",
             "Подтверждение удаления"
         )
         if confirm_delete:

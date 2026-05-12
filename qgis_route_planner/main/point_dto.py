@@ -8,4 +8,5 @@ class RoutePointDto:
     order: int
     x: float
     y: float
+    address: str
     node_id: int | None = None

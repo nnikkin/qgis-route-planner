@@ -1,5 +1,7 @@
 <RCC>
   <qresource prefix="/plugins/qgis_route_planner">
+    <file alias="pwd_show">png_resources/icons/eye.png</file>
+    <file alias="pwd_hide">png_resources/icons/eye-close.png</file>
     <file alias="cross_white">png_resources/icons/cross-white.png</file>
     <file alias="plugin_icon">png_resources/icons/map-pin.png</file>
   </qresource>

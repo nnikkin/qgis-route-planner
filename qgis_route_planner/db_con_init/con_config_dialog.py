@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from db_init_controller import DbInitController
 
 from qgis.PyQt import QtWidgets
-from qgis.PyQt.QtGui import QRegExpValidator, QIcon
+from qgis.PyQt.QtGui import QRegExpValidator, QIcon, QPixmap
 from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QCoreApplication, pyqtSlot
 
 from qgis_route_planner.presentation import MessageBoxMixin
@@ -24,10 +24,9 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__model = model
         self.__controller = controller
-
         self.__step_finished = False
-
-        self.__schemas = []
+        self.__SHOW_ICON_PATH = f":/plugins/qgis_route_planner/pwd_show"
+        self.__HIDE_ICON_PATH = f":/plugins/qgis_route_planner/pwd_hide"
 
         self.__setupUi()
 
@@ -84,13 +83,22 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.label_16.setObjectName("label_16")
         self.formLayout_3.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.label_16)
 
+        self.password_layout = QtWidgets.QHBoxLayout(self)
+        self.password_layout.setObjectName("password_layout")
+
         self.password_edit = QtWidgets.QLineEdit(self)
         self.password_edit.setMaxLength(50)
         self.password_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
-        self.password_edit.setPlaceholderText("")
         self.password_edit.setClearButtonEnabled(True)
         self.password_edit.setObjectName("password_edit")
-        self.formLayout_3.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.password_edit)
+        self.password_layout.addWidget(self.password_edit)
+
+        self.pwd_show_button = QtWidgets.QPushButton(self)
+        self.pwd_show_button.setIcon(QIcon(QPixmap(self.__SHOW_ICON_PATH)))
+        self.pwd_show_button.clicked.connect(self.__on_pwd_btn_clicked)
+        self.password_layout.addWidget(self.pwd_show_button)
+
+        self.formLayout_3.setLayout(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.password_layout)
 
         self.check_con_button = QtWidgets.QPushButton(self)
         self.check_con_button.setEnabled(False)
@@ -162,6 +170,7 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__model.schema_changed.connect(self.__on_schema_value_changed)
         self.__model.schemas_obtained.connect(self.__fill_schemas_combobox)
         self.__model.any_field_changed.connect(self.__update_check_button)
+        self.__model.visibility_changed.connect(self.__on_visibility_changed)
 
         self.__controller.connection_failed.connect(self.__on_connection_failed)
 
@@ -190,6 +199,11 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.schema_comboBox.blockSignals(False)
         self.__controller.change_schema_value("")
         self.schema_comboBox.setEnabled(False)
+
+    @pyqtSlot(bool)
+    def __on_visibility_changed(self, is_pwd_visible: bool):
+        self.pwd_show_button.setIcon(QIcon(self.__SHOW_ICON_PATH if not is_pwd_visible else self.__HIDE_ICON_PATH))
+        self.password_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password if not is_pwd_visible else QtWidgets.QLineEdit.EchoMode.Normal)
 
     @pyqtSlot(list)
     def __fill_schemas_combobox(self, schemas: list[str]):
@@ -226,7 +240,7 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     @pyqtSlot(str)
     def __on_connection_failed(self, e):
-        self._show_critical(f"При попытке подключиться произошла ошибка: {e}\nПроверьте данные и попробуйте ещё раз.")
+        self._show_error(f"При попытке подключиться произошла ошибка: {e}\nПроверьте данные и попробуйте ещё раз.")
         self.check_con_button.setEnabled(True)
 
     def __on_accept(self):
@@ -237,6 +251,9 @@ class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__step_finished = True
         self.accept()
         self.__controller.connection_step_finish()
+
+    def __on_pwd_btn_clicked(self):
+        self.__controller.change_password_visibility()
 
     def __on_test_button_clicked(self):
         self.check_con_button.setEnabled(False)
