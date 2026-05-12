@@ -108,3 +108,9 @@ class SettingsModel(QObject):
         self.__point_select_distance = value
         self.point_select_distance_changed.emit(value)
 
+    def is_last_profile(self) -> bool:
+        return len(self.__profiles) > 0
+
+    def is_active_profile(self, profile_id: int) -> bool:
+        return self.__active_profile_id == profile_id
+

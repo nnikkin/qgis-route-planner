@@ -78,9 +78,11 @@ class SettingsDialogController(QObject):
             self.__model.profiles = self.__profile_provider.get_profiles()
             self.__model.active_profile_id = self.__service.get_active_profile_id()
             self.__model.current_profile_id = self.__model.active_profile_id
-            self.set_active_profile()
+            self.__load_current_profile_data()
+            self.__model.editing_mode = FormMode.VIEW if self.__model.current_profile_id else FormMode.EMPTY
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профилей ТС: {e}")
+
 
     def __load_graph_settings(self):
         try:
@@ -157,7 +159,7 @@ class SettingsDialogController(QObject):
     def start_profile_create(self):
         """ Начать создание нового профиля """
         self.__model.current_profile_id = None
-        self.__model.current_profile_data = None
+        self.__load_current_profile_data()
         self.__model.editing_mode = FormMode.CREATE
 
     @pyqtSlot()
@@ -193,11 +195,11 @@ class SettingsDialogController(QObject):
     def select_profile(self, profile_id: int):
         """ Выбрать профиль для просмотра/редактирования """
         self.__model.current_profile_id = profile_id
+
         if profile_id is None:
             self.__model.current_profile_data = None
             self.__model.editing_mode = FormMode.EMPTY
             return
-
         self.__load_current_profile_data()
         self.__model.editing_mode = FormMode.VIEW
 
@@ -224,8 +226,6 @@ class SettingsDialogController(QObject):
             )
             self.__model.current_profile_id = profile.id
 
-            if mode == FormMode.CREATE:
-                self.set_active_profile()
             if mode == FormMode.EDIT:
                 self.__profile_provider.update_profile(self.__model.current_profile_id, profile)
 
@@ -248,10 +248,13 @@ class SettingsDialogController(QObject):
             if profile is None:
                 return
 
-            is_active = profile_id == self.__model.active_profile_id
             self.request_delete_confirmation.emit(profile.name)
         except Exception as e:
             self.show_error.emit(f"Ошибка при запросе удаления профиля: {e}")
+
+    def __set_active_profile_id(self, profile_id: int | None):
+        self.__service.set_active_profile_id(profile_id)
+        self.__model.active_profile_id = profile_id
 
     def confirm_delete_profile(self):
         """ Подтвержденное удаление профиля """
@@ -260,22 +263,16 @@ class SettingsDialogController(QObject):
             if profile_id is None:
                 return
 
-            if len(self.__model.profiles) - 1 <= 0:
+            if not self.__model.is_last_profile():
                 self.show_error.emit("Нельзя удалить единственный зарегистрированный профиль.")
                 return
 
-            if self.__model.current_profile_id == profile_id:
-                self.show_error.emit("Нельзя удалить активный профиль.\nСначала выберите и установите как активный другой профиль.")
-                return
-
-            is_active = profile_id == self.__model.active_profile_id
-            if is_active:
-                self.__service.set_active_profile_id(None)
-                self.__model.active_profile_id = None
+            if self.__model.is_active_profile(profile_id):
+                self.__set_active_profile_id(None)
 
             self.__profile_provider.delete_profile(profile_id)
             self.__model.current_profile_id = None
-            self.__model.current_profile_data = None
+            self.__load_current_profile_data()
             self.__model.editing_mode = FormMode.EMPTY
 
             self.__load_profiles()
@@ -287,16 +284,15 @@ class SettingsDialogController(QObject):
         """ Установить текущий профиль как активный """
         profile_id = self.__model.current_profile_id
         if profile_id is None:
-            self.show_info("profile_id is None")
+            self.show_info.emit("profile_id is None")
             return
 
         if self.__model.active_profile_id == profile_id:
-            self.show_info("self.__model.active_profile_id == profile_id")
+            self.show_info.emit("self.__model.active_profile_id == profile_id")
             return
 
         try:
-            self.__service.set_active_profile_id(profile_id)
-            self.__model.active_profile_id = profile_id
+            self.__set_active_profile_id(profile_id)
 
             current_profile = self.__model.current_profile_data
             if current_profile:
