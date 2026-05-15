@@ -2,7 +2,7 @@ import psycopg
 from psycopg import sql
 
 class DbConnection:
-    """Низкоуровневый класс для работы с БД"""
+    """ Низкоуровневый класс для работы с БД """
 
     def __init__(self, host: str, port: int, database: str, username: str, password: str, schema: str = None):
         self.host = host
@@ -13,7 +13,7 @@ class DbConnection:
         self.schema = schema
 
     def __create_connection(self):
-        """Создание нового соединение"""
+        """ Создание нового соединение """
         kwargs = dict(
             host=self.host,
             port=self.port,
@@ -33,7 +33,7 @@ class DbConnection:
             )
 
     def execute_query(self, query: str | sql.Composed, *params):
-        """Выполнить запрос с возвратом результата"""
+        """ Выполнить запрос с возвратом результата """
         with self.__create_connection() as connection:
             with connection.cursor() as cursor:
                 self.__apply_search_path(cursor)
@@ -41,14 +41,14 @@ class DbConnection:
                 return cursor.fetchall()
 
     def execute_nonquery(self, query: str | sql.Composed, *params):
-        """Выполнить запрос без возврата результата"""
+        """ Выполнить запрос без возврата результата """
         with self.__create_connection() as connection:
             with connection.cursor() as cursor:
                 self.__apply_search_path(cursor)
                 cursor.execute(query, params)
 
     def test_connection(self) -> bool:
-        """Проверка возможности подключения"""
+        """ Проверка возможности подключения """
         try:
             return True if self.execute_query("SELECT 1") else False
         except:

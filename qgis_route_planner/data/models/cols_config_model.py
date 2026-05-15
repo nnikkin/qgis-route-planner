@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from ...utils import ColumnRole, GeometryType
+from ...utils import ColumnRole, GeometryType, LayerRole
 from .layer_config_model import Layer
 
 from dataclasses import dataclass
@@ -74,11 +74,18 @@ class ColumnsConfigModel(QObject):
         self.__mappings[layer_name][role] = column_name
         self.mappings_changed.emit(self.__mappings)
 
+    def clear(self):
+        self.__available_columns = {}
+        self.__mappings = {}
+        self.__layers = []
+        self.available_columns_changed.emit(self.__available_columns)
+        self.mappings_changed.emit(self.__mappings)
+
     def validate_required_mappings(self) -> tuple[bool, list[str]]:
         errors = []
 
         for layer in self.__layers:
-            if layer.geom_type is not GeometryType.LINESTRING:
+            if layer.role is not LayerRole.ROADS:
                 continue
 
             mapping = self.__mappings.get(layer.name, {})
@@ -121,7 +128,7 @@ class ColumnsConfigModel(QObject):
             ColumnRole.IS_IN: ("is_in",),
             ColumnRole.Z_ORDER: ("z_order", "zorder"),
             ColumnRole.REF: ("ref",),
-            ColumnRole.OTHER: ("other_tags", "tags"),
+            ColumnRole.OTHER: ("other_tags", "tags", "all_tags"),
         }
 
         available_by_lower = {column.name.lower(): column.name for column in columns}

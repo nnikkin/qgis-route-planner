@@ -11,6 +11,8 @@ class RoutePoint:
     point_type: PointType
     order: int
     node_id: int = None
+    edge_id: int = None
+    fraction: float = None
     address: str = ""
 
     def to_dict(self):
@@ -21,5 +23,7 @@ class RoutePoint:
             'type': self.point_type.value,
             'order': self.order,
             'node_id': self.node_id,
+            'edge_id': self.edge_id,
+            'fraction': self.fraction,
             'address': self.address
         }
