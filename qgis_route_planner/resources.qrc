@@ -1,24 +1,17 @@
 <RCC>
   <qresource prefix="/plugins/qgis_route_planner">
     <file alias="cross_white">png_resources/icons/cross-white.png</file>
-    <file alias="plugin_icon">png_resources/icon.png</file>
+    <file alias="plugin_icon">png_resources/icons/map-pin.png</file>
   </qresource>
   <qresource prefix="map_icons">
-    <file alias="time_restr">png_resources/icons/clock-minus.png</file>
-    <file alias="dimen_restr">png_resources/icons/construction.png</file>
     <file alias="map_add_point">png_resources/icons/marker--plus.png</file>
     <file alias="map_move">png_resources/icons/arrow-move.png</file>
     <file alias="map_zoomin">png_resources/icons/magnifier-zoom-in.png</file>
     <file alias="map_zoomout">png_resources/icons/magnifier-zoom-out.png</file>
     <file alias="map_marker">png_resources/icons/marker.png</file>
-    <file alias="map_restrict">png_resources/icons/minus-button.png</file>
-    <file alias="map_restrict2">png_resources/icons/prohibition-button.png</file>
+    <file alias="map_restrict">png_resources/icons/prohibition-button.png</file>
   </qresource>
   <qresource prefix="route_list_icons">
     <file alias="save_icon">png_resources/icons/disk.png</file>
-    <file alias="route_blue">png_resources/icons/flag-blue.png</file>
-    <file alias="route_green">png_resources/icons/flag-green.png</file>
-    <file alias="route_red">png_resources/icons/flag-red.png</file>
-    <file alias="route_yellow">png_resources/icons/flag-yellow.png</file>
   </qresource>
 </RCC>

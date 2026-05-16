@@ -13,7 +13,8 @@ from qgis.PyQt.QtCore import Qt
 
 from qgis.core import (
     QgsGeometry, QgsPointXY, QgsWkbTypes, QgsVectorLayer,
-    QgsPalLayerSettings, QgsVectorLayerSimpleLabeling
+    QgsPalLayerSettings, QgsVectorLayerSimpleLabeling,
+    QgsSimpleLineSymbolLayer, QgsLineSymbol, QgsMarkerSymbol
 )
 from qgis.gui import (
     QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
@@ -26,10 +27,11 @@ from .message_box_mixin import MessageBoxMixin
 
 
 class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
-    """Главное окно плагина"""
+    """ Главное окно плагина """
 
     def __init__(self, model: MainWindowModel, controller: MainWindowController):
         super().__init__()
+
         self.__model: MainWindowModel = model
         self.__controller: MainWindowController = controller
         self.__restriction_dialog = None
@@ -39,12 +41,11 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         self.__restriction_markers: dict[int, QgsVertexMarker] = {}
         self.__restriction_band = None
+        self.__visible_restriction_markers: dict[int, QgsVertexMarker] = {}
 
-        self.__restr_mode: bool = False
+        self.__setupUi()
 
-        self.setupUi()
-
-    def setupUi(self):
+    def __setupUi(self):
         self.setObjectName("PluginMainWindow")
         self.resize(800, 600)
 
@@ -83,6 +84,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         # Карта
         self.mapView = MapWidget()
+        self.__controller.set_map_canvas(self.mapView)
         self.mapView.setSizePolicy(
             QtWidgets.QSizePolicy.Expanding,
             QtWidgets.QSizePolicy.Expanding
@@ -93,23 +95,29 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         # Меню
         self.menubar = QtWidgets.QMenuBar(self)
         self.settings_menu = QtWidgets.QMenu("Настройки", self.menubar)
+        self.view_menu = QtWidgets.QMenu("Вид", self.menubar)
         self.about_menu = QtWidgets.QMenu("Справка", self.menubar)
 
         self.db_action = QtWidgets.QAction("Подключение к базе данных", self)
         self.profiles_action = QtWidgets.QAction("Профили транспортных средств", self)
         self.graph_action = QtWidgets.QAction("Настройки графа дорог", self)
+        self.weather_action = QtWidgets.QAction("Настройки сервиса погоды", self)
+        self.show_restrictions_action = QtWidgets.QAction("Показывать точки ограничений", self)
+        self.show_restrictions_action.setCheckable(True)
         self.about_action = QtWidgets.QAction("О модуле", self)
 
-        self.settings_menu.addActions([self.db_action, self.profiles_action, self.graph_action])
+        self.settings_menu.addActions([self.db_action, self.profiles_action, self.graph_action, self.weather_action])
+        self.view_menu.addAction(self.show_restrictions_action)
         self.about_menu.addAction(self.about_action)
         self.menubar.addMenu(self.settings_menu)
+        self.menubar.addMenu(self.view_menu)
         self.menubar.addMenu(self.about_menu)
         self.setMenuBar(self.menubar)
 
         self.statusbar = QtWidgets.QStatusBar(self)
         self.setStatusBar(self.statusbar)
 
-        self.retranslateUi()
+        self.__retranslateUi()
         self.tabWidget.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(self)
 
@@ -118,18 +126,21 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         self.mapView.show()
 
-    def retranslateUi(self):
+    def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
         self.setWindowTitle(_translate("MainWindow", "Поиск маршрутов"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "Точки"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Маршруты"))
         self.clear_list_button.setText(_translate("MainWindow", "Построить новый маршрут"))
         self.settings_menu.setTitle(_translate("MainWindow", "Настройки"))
+        self.view_menu.setTitle(_translate("MainWindow", "Вид"))
         self.about_menu.setTitle(_translate("MainWindow", "Справка"))
         self.about_action.setText(_translate("MainWindow", "О модуле"))
         self.profiles_action.setText(_translate("MainWindow", "Профили транспортных средств"))
         self.db_action.setText(_translate("MainWindow", "Подключение к базе данных"))
         self.graph_action.setText(_translate("MainWindow", "Настройки графа дорог"))
+        self.weather_action.setText(_translate("MainWindow", "Настройки сервиса погоды"))
+        self.show_restrictions_action.setText(_translate("MainWindow", "Показывать точки ограничений"))
 
     def __setup_map_tools(self):
         self.__zoom_in_tool = QgsMapToolZoom(self.mapView, False)
@@ -146,7 +157,9 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__model.active_route_changed.connect(self.__on_active_route_changed)
         self.__model.status_message_changed.connect(self.__on_status_message_changed)
         self.__model.active_tab_changed.connect(self.tabWidget.setCurrentIndex)
-        self.__model.clear_button_enabled_changed.connect(self.clear_list_button.setEnabled)
+        self.__model.clear_button_enabled_changed.connect(self.__on_clear_button_enabled_changed)
+        self.__model.restriction_select_mode_activated.connect(self.__on_point_select_mode_changed)
+        self.__model.restrictions_visible_changed.connect(self.__on_restrictions_visible_changed)
 
         self.__controller.layers_obtained.connect(self.__initialize_map)
         self.__controller.show_point_context_menu_requested.connect(self.__show_context_menu_for_point)
@@ -156,12 +169,8 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__controller.point_marker_remove_requested.connect(self.__remove_point_marker)
         self.__controller.point_marker_update_requested.connect(self.__update_point_marker_color)
         self.__controller.restriction_point_added.connect(self.__add_restriction_point_marker)
-        self.__controller.restriction_band_added.connect(self.__display_restriction_band)
-        self.__controller.restriction_band_cleared.connect(self.__clear_restriction_band)
-
-        self.__controller.select_point_on_map_requested.connect(
-            lambda: self.mapView.setMapTool(self.__select_restriction_point_tool)
-        )
+        self.__controller.restrictions_display_requested.connect(self.__display_visible_restrictions)
+        self.__controller.restrictions_display_cleared.connect(self.__clear_visible_restriction_markers)
 
         self.__connect_ui_to_controller()
 
@@ -175,6 +184,12 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.graph_action.triggered.connect(
             lambda: self.__controller.open_settings_dialog(2)
         )
+        self.weather_action.triggered.connect(
+            lambda: self.__controller.open_settings_dialog(3)
+        )
+        self.show_restrictions_action.toggled.connect(
+            self.__controller.set_restrictions_visible
+        )
         self.about_action.triggered.connect(self.__open_about_dialog)
 
         self.mapView.zoom_in_btn.clicked.connect(lambda: self.mapView.setMapTool(self.__zoom_in_tool))
@@ -184,7 +199,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             lambda: self.mapView.setMapTool(self.__select_route_point_tool)
         )
         self.mapView.open_restriction_dialog_btn.clicked.connect(
-            self.__activate_restriction_mode
+            self.__controller.open_restriction_dialog
         )
 
         self.__select_route_point_tool.pointClicked.connect(self.__controller.on_map_point_selected)
@@ -224,7 +239,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(str)
     def __on_status_message_changed(self, message: str):
-        """Обрабатывает статусные сообщения и коды ошибок от контроллера"""
+        """ Обрабатывает статусные сообщения и коды ошибок от контроллера """
         error_messages = {
             "error:snap": (
                 "Не удалось привязать точку к дорожной сети.\n"
@@ -239,8 +254,8 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         if message == "error:no_profile":
             q = self._show_question(
-                "Сначала нужно создать профиль транспортного средства."
-                "\nВы хотите перейти в настройки модуля?"
+                "Сначала нужно создать профиль транспортного средства, либо установить существующий в качестве активного."
+                "\nВы хотите перейти в управление профилями?"
             )
             if q:
                 self.__controller.open_settings_dialog(1)
@@ -249,16 +264,32 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         else:
             self.statusBar().showMessage(message)
 
-    @pyqtSlot(object, int)
-    def __show_context_menu_for_point(self, point: QgsPointXY, node_id: int):
-        """Показать контекстное меню точки"""
+    @pyqtSlot(bool)
+    def __on_clear_button_enabled_changed(self, enabled: bool):
+        self.clear_list_button.setEnabled(
+            enabled and not self.__model.restriction_select_mode
+        )
+
+    @pyqtSlot(bool)
+    def __on_restrictions_visible_changed(self, visible: bool):
+        self.show_restrictions_action.blockSignals(True)
+        self.show_restrictions_action.setChecked(visible)
+        self.show_restrictions_action.blockSignals(False)
+
+    def __handle_restriction_selection(self, point: QgsPointXY, snap_info):
+        node_id = snap_info.get("node_id") if isinstance(snap_info, dict) else snap_info
+        self.__controller.on_add_restriction_point(point, node_id)
+
+    @pyqtSlot(object, object)
+    def __show_context_menu_for_point(self, point: QgsPointXY, snap_info):
+        """ Показать контекстное меню точки """
         menu = QMenu(self.mapView)
 
-        if self.__restr_mode:
+        if self.__model.restriction_select_mode:
             action = QAction("Установить ограничение", menu)
             action.triggered.connect(
-                lambda p=point, nid=node_id:
-                self.__controller.on_add_restriction_point(p, nid)
+                lambda checked=False, p=point, s=snap_info:
+                self.__handle_restriction_selection(p, s)
             )
             menu.addAction(action)
 
@@ -281,8 +312,8 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             for title, point_type, enabled in actions:
                 action = QAction(title, menu)
                 action.triggered.connect(
-                    lambda checked=False, pt=point_type, p=point, nid=node_id:
-                        self.__controller.on_add_route_point(p, pt, nid)
+                    lambda checked=False, pt=point_type, p=point, s=snap_info:
+                    self.__controller.on_add_route_point(p, pt, s)
                 )
                 action.setEnabled(enabled)
                 menu.addAction(action)
@@ -291,7 +322,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(object)
     def __add_point_marker(self, route_point: RoutePoint):
-        """Добавить маркер на карту"""
+        """ Добавить маркер на карту """
         marker = QgsVertexMarker(self.mapView)
         marker.setCenter(route_point.qgs_point_xy)
         marker.setIconType(QgsVertexMarker.IconType.ICON_CIRCLE)
@@ -305,14 +336,14 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(int)
     def __remove_point_marker(self, point_id: int):
-        """Убрать маркер с карты"""
+        """ Убрать маркер с карты """
         marker = self.__point_markers.pop(point_id, None)
         if marker:
             self.mapView.scene().removeItem(marker)
 
     @pyqtSlot(int)
     def __update_point_marker_color(self, point_id: int):
-        """Изменить цвет маркера"""
+        """ Изменить цвет маркера """
         marker = self.__point_markers.get(point_id)
         if not marker:
             return
@@ -322,7 +353,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(list)
     def __display_routes(self, routes: list):
-        """Метод для отображения маршрутов на карте"""
+        """ Метод для отображения маршрутов на карте """
         self.__clear_route_bands()
         if not routes:
             return
@@ -352,7 +383,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.mapView.refresh()
 
     def __highlight_routes(self, active_index: int):
-        """Подсветка маршрута"""
+        """ Подсветка маршрута """
         for i, band_list in enumerate(self.__route_bands):
             is_active = (i == active_index)
             for band in band_list:
@@ -378,19 +409,55 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(list)
     def __initialize_map(self, layers: list[QgsVectorLayer]):
-        """Принимает слои от контроллера и устанавливает их на карту"""
         self.mapView.set_layers(layers)
         for layer in layers:
-            if 'graph_edges' in layer.name() and layer.fields().indexOf('name') >= 0:
+            if layer.geometryType() == QgsWkbTypes.LineGeometry:
+                from qgis.core import QgsSimpleLineSymbolLayer, QgsLineSymbol
+                from qgis.PyQt.QtGui import QColor
+
+                source = layer.dataProvider().dataSourceUri()
+                is_routing = '"routing"' in source or 'table=routing.' in source
+
+                symbol = QgsLineSymbol()
+                symbol.deleteSymbolLayer(0)
+                line = QgsSimpleLineSymbolLayer()
+
+                if is_routing:
+                    line.setColor(Qt.black)  # граф
+                    line.setWidth(0.4)
+                else:
+                    line.setColor(Qt.gray)  # исходные данные
+                    line.setWidth(0.2)
+
+                symbol.appendSymbolLayer(line)
+                layer.renderer().setSymbol(symbol)
+
+            if layer.geometryType() == QgsWkbTypes.PointGeometry:
+                source = layer.dataProvider().dataSourceUri().lower()
+                layer_name = layer.name().lower()
+                is_graph_nodes = "graph_nodes" in layer_name or "graph_nodes" in source
+                symbol = QgsMarkerSymbol.createSimple({
+                    "name": "circle",
+                    "color": "190,70,70" if is_graph_nodes else "0,0,0",
+                    "outline_color": "70,35,35" if is_graph_nodes else "0,0,0",
+                    "size": "1.8" if is_graph_nodes else "0.5",
+                })
+                layer.renderer().setSymbol(symbol)
+
+            if layer.fields().indexOf('name') >= 0:
                 settings = QgsPalLayerSettings()
                 settings.fieldName = 'name'
                 settings.enabled = True
+                if hasattr(QgsPalLayerSettings, "Line"):
+                    settings.placement = QgsPalLayerSettings.Line
                 layer.setLabelsEnabled(True)
                 layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
-                layer.triggerRepaint()
+
+            layer.triggerRepaint()
+        self.mapView.refresh()
 
     def __set_marker_color(self, marker: QgsVertexMarker, point_type: PointType):
-        """Установить цвет маркера"""
+        """ Установить цвет маркера """
         colors = {
             PointType.START: Qt.green,
             PointType.END: Qt.magenta,
@@ -400,7 +467,7 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         marker.setColor(colors.get(point_type, Qt.black))
 
     def __get_route_info(self, route: list[dict]) -> dict:
-        """Получить информацию по маршруту"""
+        """ Получить информацию по маршруту """
         if not route:
             return {'distance_km': 0, 'time_minutes': 0, 'segments': 0}
         return {
@@ -409,35 +476,30 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             'segments': len(route),
         }
 
+    @pyqtSlot(bool)
+    def __on_point_select_mode_changed(self, active: bool):
+        self.__set_main_ui_locked(active)
+        if active:
+            self.__activate_restriction_mode()
+        else:
+            self.__deactivate_restriction_mode()
+
     def __activate_restriction_mode(self):
-        """Активировать режим выбора точек для ограничений"""
-        self.__restr_mode = True
-        self.__controller.open_restriction_dialog()
+        """ Активировать режим выбора точек для ограничений """
+        self.raise_()
+        self.mapView.setMapTool(self.__select_restriction_point_tool)
+
+    def __deactivate_restriction_mode(self):
+        """ Деактивировать режим выбора точек для ограничений """
+        self.mapView.unsetMapTool(self.__select_restriction_point_tool)
+        self.__clear_restriction_markers()
 
     def __cancel_restriction_selection(self):
-        self.__restr_mode = False
-        self.mapView.setMapTool(None)
+        self.__deactivate_restriction_mode()
         self.__controller.cancel_add_restriction_point()
 
-    def __on_restriction_point_clicked(self, point: QgsPointXY):
-        """Обработчик клика для выбора точки ограничения"""
-        self.mapView.setMapTool(self.__pan_tool)
-        self.statusBar().clearMessage()
-
-        # Привязываем точку к дороге
-        snapped = self.__controller.snap_point(point)
-        if not snapped:
-            self._show_warning("Точка не привязана к дорожной сети!")
-            return
-
-        snapped_point, node_id = snapped
-
-        if self.__restriction_dialog:
-            self.__restriction_dialog.add_node_to_list(node_id, snapped_point.x(), snapped_point.y())
-            self.__restriction_dialog.show()
-
     def __add_restriction_point_marker(self, node_id: int, x: float, y: float):
-        """Добавить маркер точки ограничения на карту"""
+        """ Добавить маркер точки ограничения на карту """
         marker = QgsVertexMarker(self.mapView)
         marker.setCenter(QgsPointXY(x, y))
         marker.setIconType(QgsVertexMarker.IconType.ICON_CROSS)
@@ -450,35 +512,66 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             self.__restriction_markers = {}
         self.__restriction_markers[node_id] = marker
 
-    def __display_restriction_band(self, route: list[dict]):
-        """Отобразить ограничения линией"""
-        self.__clear_restriction_band()
+    def __clear_restriction_markers(self):
+        """ Очистить точку ограничения с карты """
+        if self.__restriction_markers:
+            for node_id, marker in list(self.__restriction_markers.items()):
+                self.mapView.scene().removeItem(marker)
+            self.__restriction_markers.clear()
 
-        band = QgsRubberBand(self.mapView, QgsWkbTypes.LineGeometry)
-        band.setColor(Qt.red)
-        band.setWidth(4)
+    @pyqtSlot(list)
+    def __display_visible_restrictions(self, restrictions: list[dict]):
+        self.__clear_visible_restriction_markers()
+        for restriction in restrictions:
+            marker_id = restriction.get("id") or restriction.get("node_id")
+            if marker_id is None:
+                continue
 
-        for edge in route:
-            geom = QgsGeometry.fromWkt(edge["geom"])
-            if not geom.isNull():
-                band.addGeometry(geom, None)
+            marker = QgsVertexMarker(self.mapView)
+            marker.setCenter(QgsPointXY(restriction["x"], restriction["y"]))
+            marker.setIconType(QgsVertexMarker.IconType.ICON_CROSS)
+            marker.setColor(
+                Qt.darkMagenta if restriction.get("selected") else Qt.red
+            )
+            marker.setIconSize(14 if restriction.get("selected") else 10)
+            marker.setPenWidth(3 if restriction.get("selected") else 2)
+            marker.show()
+            self.__visible_restriction_markers[marker_id] = marker
 
-        self.__restriction_band = band
+        self.mapView.refresh()
 
-    def __clear_restriction_band(self):
-        """Очистить линию ограничений"""
-        if self.__restriction_band:
-            self.mapView.scene().removeItem(self.__restriction_band)
-            self.__restriction_band = None
+    def __clear_visible_restriction_markers(self):
+        for marker in self.__visible_restriction_markers.values():
+            self.mapView.scene().removeItem(marker)
+        self.__visible_restriction_markers.clear()
+        self.mapView.refresh()
+
+    def __set_main_ui_locked(self, locked: bool):
+        for menu in (self.settings_menu, self.view_menu, self.about_menu):
+            menu.setEnabled(not locked)
+
+        for widget in (
+                self.tabWidget,
+                self.mapView.zoom_in_btn,
+                self.mapView.zoom_out_btn,
+                self.mapView.pan_btn,
+                self.mapView.select_route_points_btn,
+                self.mapView.open_restriction_dialog_btn,
+        ):
+            widget.setEnabled(not locked)
+
+        self.__on_clear_button_enabled_changed(self.__model.clear_button_enabled)
 
     def __open_about_dialog(self):
         self._show_info(
             """<html><body>
                     <p>В проекте используется набор иконок Fugue Icons.<br>
-                    (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>.
-                    All rights reserved.</p>
-                    <p>Лицензия: 
+                    (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>. All rights reserved.</p>
+                    <p>Лицензия 
             <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a></p>
+                    <hr>
+                    <p>Сервис погоды предоставлен <a href="https://openweathermap.org/">OpenWeatherMap.</a></p>
+                    <p>Бесплатный тариф OpenWeatherMap предоставляется под лицензией <a href="http://opendatacommons.org/licenses/odbl/1.0/">ODbL (Open Database License)</a>.</p>
                     </body></html>
                     """,
             "О модуле"

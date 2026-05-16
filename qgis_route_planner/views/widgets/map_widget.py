@@ -14,7 +14,7 @@ from qgis_route_planner import resources
 
 
 class MapWidget(QgsMapCanvas):
-    """Виджет карты для главного окна"""
+    """ Виджет карты для главного окна """
 
     def __init__(self):
         super().__init__()
@@ -79,7 +79,7 @@ class MapWidget(QgsMapCanvas):
         return self.__btn_open_restriction_dialog
 
     def set_layers(self, layers: list):
-        """Устанавливает слои на карту"""
+        """ Устанавливает слои на карту """
         self.__layers = layers
         self.setLayers(layers)
 
@@ -103,7 +103,7 @@ class MapWidget(QgsMapCanvas):
         self.refresh()
 
     def add_layer(self, layer: QgsVectorLayer):
-        """Добавляет слой"""
+        """ Добавляет слой """
         current_layers = self.__layers
         current_layers.append(layer)
         self.set_layers(current_layers)

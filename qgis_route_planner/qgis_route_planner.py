@@ -3,12 +3,11 @@ from qgis_route_planner import resources
 
 from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QApplication
 
 from qgis_route_planner.controllers import PluginController
 
 
-#TODO: реализовать логгер и исключения
 class QgisRoutePlanner:
 
     def __init__(self, iface):
@@ -17,9 +16,15 @@ class QgisRoutePlanner:
         self.actions = []
         self.menu = self.tr(u"&Поиск маршрутов")
         self.first_start = True
+        self.icon_path = f":/plugins/qgis_route_planner/plugin_icon"
+
+        app = QApplication.instance()
+        if app:
+            app.setWindowIcon(QIcon(self.icon_path))
 
         self.__controller: PluginController = PluginController()
         self.__controller.plugin_initialized.connect(self.__on_initialized)
+        self.__controller.plugin_init_cancelled.connect(self.__on_init_cancelled)
         self.__controller.crit_plugin_error.connect(self.unload)
 
         from qgis.PyQt.QtCore import QLibraryInfo
@@ -73,9 +78,8 @@ class QgisRoutePlanner:
         return action
 
     def initGui(self):
-        icon_path = f":/plugins/qgis_route_planner/plugin_icon"
         self.add_action(
-            icon_path,
+            self.icon_path,
             text=self.tr(u"Открыть модуль поиска маршрутов"),
             callback=self.run,
             parent=self.iface.mainWindow(),
@@ -98,3 +102,6 @@ class QgisRoutePlanner:
 
     def __on_initialized(self):
         self.first_start = False
+
+    def __on_init_cancelled(self):
+        self.first_start = True

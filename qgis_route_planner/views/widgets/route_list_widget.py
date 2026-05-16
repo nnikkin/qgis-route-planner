@@ -100,13 +100,13 @@ class RouteListWidget(QToolBox):
         self.__pages.append(route_page)
 
     def __generate_instructions(self, route: list) -> str:
-        """Генерирует текстовые инструкции по маршруту"""
+        """ Генерирует текстовые инструкции по маршруту """
         if not route:
             return "<div>Нет инструкций</div>"
         instructions = []
         total_distance = 0
         for i, edge in enumerate(route):
-            total_distance += edge['cost']
+            total_distance += edge.get('length_m', 0)
             distance_km = total_distance / 1000
             if i == 0:
                 action = "Старт"

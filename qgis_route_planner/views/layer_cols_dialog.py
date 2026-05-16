@@ -14,7 +14,7 @@ from ..utils import ColumnRole
 
 
 class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
-    """Диалоговое окно для сопоставления полей таблиц и их атрибутов"""
+    """ Диалоговое окно для сопоставления полей таблиц и их атрибутов """
 
     def __init__(
             self,
@@ -28,7 +28,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__controller = controller
         self.__step_finished = False
 
-        self.setupUi()
+        self.__setupUi()
 
     def __connect(self):
         self.__model.available_columns_changed.connect(self.__update_columns_table)
@@ -40,7 +40,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.buttonBox.accepted.connect(self.__on_accept)
         self.buttonBox.rejected.connect(self.close)
 
-    def setupUi(self):
+    def __setupUi(self):
         self.setObjectName("TableColumnsDialog")
         self.resize(900, 700)
 
@@ -70,17 +70,18 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.buttonBox.setObjectName("buttonBox")
         self.verticalLayout.addWidget(self.buttonBox)
 
-        self.retranslateUi()
+        self.__retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
         self.__connect()
 
-    def retranslateUi(self):
+    def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
         self.setWindowTitle(_translate("TableColumnsDialog", "Шаг 3: сопоставление полей выбранных таблиц"))
         self.label.setText(_translate("TableColumnsDialog", "Укажите назначение каждого из столбцов для таблиц."))
 
     def showEvent(self, event, **kwargs):
         super().showEvent(event)
+        self.__step_finished = False
         self.__update_columns_table()
 
     def closeEvent(self, event, **kwargs):
