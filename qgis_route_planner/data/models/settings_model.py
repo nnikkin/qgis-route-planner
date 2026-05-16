@@ -5,7 +5,7 @@ from ...utils import FormMode
 
 
 class SettingsModel(QObject):
-    """Модель для хранения состояния окна настроек"""
+    """ Модель для хранения состояния окна настроек """
 
     # Сигналы для БД
     db_params_changed = pyqtSignal(object)
@@ -17,6 +17,10 @@ class SettingsModel(QObject):
     editing_mode_changed = pyqtSignal(FormMode)
     current_profile_data_changed = pyqtSignal(object)
 
+    api_credentials_changed = pyqtSignal(str, str)
+    api_place_changed = pyqtSignal(float, float)
+    weather_settings_changed = pyqtSignal(dict)
+
     def __init__(self):
         super().__init__()
 
@@ -27,6 +31,7 @@ class SettingsModel(QObject):
         self.__current_profile_id: int = None
         self.__editing_mode: FormMode = FormMode.EMPTY
         self.__current_profile_data: VehicleProfile = None
+        self.__weather_settings: dict = {}
 
     @property
     def db_params(self):
@@ -81,3 +86,12 @@ class SettingsModel(QObject):
     def current_profile_data(self, value: VehicleProfile):
         self.__current_profile_data = value
         self.current_profile_data_changed.emit(value)
+
+    @property
+    def weather_settings(self) -> dict:
+        return self.__weather_settings
+
+    @weather_settings.setter
+    def weather_settings(self, value: dict):
+        self.__weather_settings = value or {}
+        self.weather_settings_changed.emit(self.__weather_settings)
