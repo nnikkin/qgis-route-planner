@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from ...utils import GeometryType, LayerRole
+from qgis_route_planner.utils import GeometryType, LayerRole
 
 
 from dataclasses import dataclass
@@ -12,6 +12,8 @@ class Layer:
 
 
 class LayerConfigModel(QObject):
+    """ Модель, используемая LayerColumnsDialog """
+
     layers_changed = pyqtSignal(list)
     columns_changed = pyqtSignal(list)
 

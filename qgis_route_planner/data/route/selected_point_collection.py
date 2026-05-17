@@ -1,18 +1,19 @@
+from __future__ import annotations
+
 from qgis.core import QgsPointXY
 
 from . import PointType, RoutePoint
-from ...utils import DoublyLinkedList
 
 
 class SelectedPointCollection:
-    """ Коллекция точек, выбранных для расчёта маршрута  """
+    """ Коллекция точек, выбранных для расчёта маршрута """
 
     def __init__(self):
-        self.__points: DoublyLinkedList = DoublyLinkedList()
+        self.__points: list = []
         self.__next_point_id = 1
 
     @property
-    def points(self) -> DoublyLinkedList:
+    def points(self) -> list:
         return self.__points
 
     @property
@@ -22,17 +23,10 @@ class SelectedPointCollection:
     def get_point_ids(self) -> list[int]:
         return [p.node_id for p in self.__points]
 
-    def get_route_points(self) -> list[RoutePoint]:
-        return list(self.__points)
-
-    def has_start(self) -> bool:
-        pass
-
-    def has_end(self) -> bool:
-        pass
-
     def has_required_points(self) -> bool:
-        pass
+        has_start = any(p.point_type == PointType.START for p in self.__points)
+        has_end = any(p.point_type == PointType.END for p in self.__points)
+        return has_start and has_end
 
     def __reindex(self):
         """ Обновляет поле order у каждой точки согласно их позиции в списке"""
@@ -40,7 +34,7 @@ class SelectedPointCollection:
             point.order = index
 
     def __insert_order(self, point_type: PointType) -> int:
-        """ Определяет порядковый номер для новой точки  """
+        """ Определяет порядковый номер для новой точки """
         if point_type == PointType.START:
             return -1
 
@@ -76,11 +70,11 @@ class SelectedPointCollection:
         self.__next_point_id += 1
         self.__points.append(route_point)
 
-        self.__points.sort_by_order()
+        self.__points.sort(key=lambda p: p.order)
         self.__reindex()
 
     def remove_point(self, point_id: int) -> RoutePoint | None:
-        point = self.__points.remove_by_id(point_id)
+        point = self.__points.remove(point_id)
         if point:
             self.__reindex()
         return point
@@ -90,34 +84,9 @@ class SelectedPointCollection:
         self.__next_point_id = 1
 
     def __sort_key(self, p: RoutePoint):
-        if p.point_type == PointType.START: return (0, p.order)
-        if p.point_type == PointType.END: return (2, p.order)
-        return (1, p.order)
-
-    def change_point_type(self, point_id: int, new_type: PointType) -> RoutePoint | None:
-        target_point = self.get_point(point_id)
-        if not target_point:
-            return None
-
-        target_point.point_type = new_type
-        sorted_points = sorted(list(self.__points), key=self.__sort_key)
-        self.__points.clear()
-        for p in sorted_points:
-            self.__points.append(p)
-
-        self.__reindex()
-        return target_point
-
-    def has_required_points(self) -> bool:
-        has_start = any(p.point_type == PointType.START for p in self.__points)
-        has_end = any(p.point_type == PointType.END for p in self.__points)
-        return has_start and has_end
+        if p.point_type == PointType.START: return 0, p.order
+        if p.point_type == PointType.END: return 2, p.order
+        return 1, p.order
 
     def get_point(self, point_id: int) -> RoutePoint | None:
         return next((p for p in self.__points if p.id == point_id), None)
-
-    def __str__(self):
-        res = "RoutePointCollection [\n"
-        for p in self.__points:
-            res += f"  {p},\n"
-        return res + "]"

@@ -1,6 +1,9 @@
 import psycopg
 from psycopg import sql
 
+from qgis_route_planner.utils.logger import Logger
+
+
 class DbConnection:
     """ Низкоуровневый класс для работы с БД """
 
@@ -20,7 +23,7 @@ class DbConnection:
             dbname=self.database,
             user=self.username,
             password=self.password,
-            connect_timeout=3  # 3 seconds
+            connect_timeout=3  # 3 сек
         )
         return psycopg.connect(**kwargs)
 
@@ -49,10 +52,7 @@ class DbConnection:
 
     def test_connection(self) -> bool:
         """ Проверка возможности подключения """
-        try:
-            return True if self.execute_query("SELECT 1") else False
-        except:
-            return False
+        return True if self.execute_query("SELECT 1") else False
 
     def has_required_params(self) -> bool:
         return all([self.host, self.port, self.database, self.username])

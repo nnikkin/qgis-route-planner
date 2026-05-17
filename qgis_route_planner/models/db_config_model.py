@@ -1,6 +1,8 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
 class DbConfigModel(QObject):
+    """ Модель, используемая ConnectionConfigDialog """
+
     host_changed = pyqtSignal(str)
     port_changed = pyqtSignal(str)
     username_changed = pyqtSignal(str)

@@ -1,10 +1,11 @@
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from ..route import RoutePoint
-from ..vehicle import VehicleProfile
+from qgis_route_planner.data.route import RoutePoint
+from qgis_route_planner.data.vehicle import VehicleProfile
 
 
 class MainWindowModel(QObject):
+    """ Модель главного окна плагина PluginMainWindow """
     points_changed = pyqtSignal(list)
 
     routes_changed = pyqtSignal(list)

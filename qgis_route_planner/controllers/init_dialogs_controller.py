@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from ..data.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel
+    from qgis_route_planner.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel
     from ..services import SpatialDataService
     from ..utils import ColumnRole, GeometryType, LayerRole
 
@@ -11,6 +11,8 @@ from .base_controller import BaseController
 
 
 class InitDialogsController(BaseController):
+    """ Контроллер окон инициализации плагина """
+
     con_test_requested = pyqtSignal()
     con_params_obtained = pyqtSignal()
     layers_selected = pyqtSignal()

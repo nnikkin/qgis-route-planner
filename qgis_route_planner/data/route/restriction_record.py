@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from qgis_route_planner.data.models import RestrictionType
+    from qgis_route_planner.models import RestrictionType
 
 
 @dataclass
@@ -24,7 +24,7 @@ class RestrictionRecord:
 
     @staticmethod
     def dict_to_record(data: dict):
-        """ Преобразовать словарь в объект RestrictionRecord"""
+        """ Преобразовать словарь в объект RestrictionRecord """
         return RestrictionRecord(
             id=data.get("id"),
             restriction_type_id=data.get("restriction_type_id", 1),
@@ -42,7 +42,7 @@ class RestrictionRecord:
 
     @staticmethod
     def record_to_dict(record) -> dict:
-        """ Преобразовать объект RestrictionRecord в словарь"""
+        """ Преобразовать объект RestrictionRecord в словарь """
         return {
             "id": record.id,
             "restriction_type_id": record.restriction_type_id,
@@ -70,7 +70,7 @@ class RestrictionRecord:
     @staticmethod
     def id_to_type(type_id: int) -> RestrictionType:
         """ Преобразовать ID типа в enum"""
-        from qgis_route_planner.data.models import RestrictionType
+        from qgis_route_planner.models import RestrictionType
 
         return {
             1: RestrictionType.SIMPLE,

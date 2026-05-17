@@ -24,10 +24,10 @@ class VehicleProfileRepository:
             id=row[0],
             name=row[1],
             type=row[2],
-            height_m=float(row[3] or 0),
-            width_m=float(row[4] or 0),
-            weight_t=float(row[5] or 0),
-            depth_m=float(row[6] or 0),
+            height_m=float(row[3] or 0.1),
+            width_m=float(row[4] or 0.1),
+            weight_t=float(row[5] or 0.1),
+            depth_m=float(row[6] or 0.1),
         )
 
     def get_all(self) -> list[VehicleProfile]:

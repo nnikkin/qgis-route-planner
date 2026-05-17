@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import psycopg.errors
+
 from ..data.route import RestrictionRecord
 from ..repositories import DbConnection
 
@@ -43,12 +47,9 @@ class RestrictionRepository:
             ("valid_from", "TIMESTAMP"),
             ("valid_to", "TIMESTAMP"),
         ]:
-            try:
-                self.__db.execute_nonquery(
-                    f"ALTER TABLE routing.restrictions ADD COLUMN IF NOT EXISTS {col} {definition}"
-                )
-            except Exception:
-                pass
+            self.__db.execute_nonquery(
+                f"ALTER TABLE routing.restrictions ADD COLUMN IF NOT EXISTS {col} {definition}"
+            )
         self.__migrate_legacy_value_text()
 
     def ensure_default_types(self):
@@ -63,15 +64,18 @@ class RestrictionRepository:
         for type_id, code, name in defaults:
             if type_id in existing:
                 continue
-            self.__db.execute_nonquery(
-                """
-                INSERT INTO routing.restriction_types
-                    (restriction_type_id, code, name)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (restriction_type_id) DO NOTHING
-                """,
-                type_id, code, name,
-            )
+            try:
+                self.__db.execute_nonquery(
+                    """
+                    INSERT INTO routing.restriction_types
+                        (restriction_type_id, code, name)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (restriction_type_id) DO NOTHING
+                    """,
+                    type_id, code, name,
+                )
+            except psycopg.errors.DuplicateColumn:
+                pass
 
     def __next_id(self) -> int:
         rows = self.__db.execute_query(
@@ -219,70 +223,64 @@ class RestrictionRepository:
         }
 
     def __migrate_legacy_value_text(self):
-        try:
-            self.__db.execute_nonquery("""
-                UPDATE routing.restrictions
-                SET
-                    max_height_m = COALESCE(
-                        max_height_m,
-                        NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
-                    ),
-                    max_width_m = COALESCE(
-                        max_width_m,
-                        NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
-                    ),
-                    max_weight_t = COALESCE(
-                        max_weight_t,
-                        NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
-                    ),
-                    value_num = COALESCE(
-                        value_num,
-                        NULLIF(NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
-                        NULLIF(NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
-                        NULLIF(NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0)
-                    )
-                WHERE restriction_type_id = 2
-                  AND value_text IS NOT NULL
-                  AND value_text LIKE '%=%';
-            """)
-            self.__db.execute_nonquery("""
-                UPDATE routing.restrictions
-                SET value_text = ''
-                WHERE restriction_type_id = 2
-                  AND value_text IS NOT NULL
-                  AND value_text <> ''
-                  AND (
-                      max_height_m IS NOT NULL
-                      OR max_width_m IS NOT NULL
-                      OR max_weight_t IS NOT NULL
-                  );
-            """)
-        except Exception:
-            pass
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET
+                            max_height_m = COALESCE(
+                                max_height_m,
+                                NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
+                            ),
+                            max_width_m = COALESCE(
+                                max_width_m,
+                                NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
+                            ),
+                            max_weight_t = COALESCE(
+                                max_weight_t,
+                                NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
+                            ),
+                            value_num = COALESCE(
+                                value_num,
+                                NULLIF(NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
+                                NULLIF(NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
+                                NULLIF(NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0)
+                            )
+                        WHERE restriction_type_id = 2
+                          AND value_text IS NOT NULL
+                          AND value_text LIKE '%=%';
+                    """)
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET value_text = ''
+                        WHERE restriction_type_id = 2
+                          AND value_text IS NOT NULL
+                          AND value_text <> ''
+                          AND (
+                              max_height_m IS NOT NULL
+                              OR max_width_m IS NOT NULL
+                              OR max_weight_t IS NOT NULL
+                          );
+                    """)
 
-        try:
-            self.__db.execute_nonquery("""
-                UPDATE routing.restrictions
-                SET
-                    valid_from = COALESCE(
-                        valid_from,
-                        NULLIF(substring(value_text from 'from=([^;]+)'), '')::timestamp
-                    ),
-                    valid_to = COALESCE(
-                        valid_to,
-                        NULLIF(substring(value_text from 'to=([^;]+)'), '')::timestamp
-                    )
-                WHERE restriction_type_id = 3
-                  AND value_text IS NOT NULL
-                  AND value_text LIKE '%=%';
-            """)
-            self.__db.execute_nonquery("""
-                UPDATE routing.restrictions
-                SET value_text = ''
-                WHERE restriction_type_id = 3
-                  AND value_text IS NOT NULL
-                  AND value_text <> ''
-                  AND (valid_from IS NOT NULL OR valid_to IS NOT NULL);
-            """)
-        except Exception:
-            pass
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET
+                            valid_from = COALESCE(
+                                valid_from,
+                                NULLIF(substring(value_text from 'from=([^;]+)'), '')::timestamp
+                            ),
+                            valid_to = COALESCE(
+                                valid_to,
+                                NULLIF(substring(value_text from 'to=([^;]+)'), '')::timestamp
+                            )
+                        WHERE restriction_type_id = 3
+                          AND value_text IS NOT NULL
+                          AND value_text LIKE '%=%';
+                    """)
+        self.__db.execute_nonquery("""
+                        UPDATE routing.restrictions
+                        SET value_text = ''
+                        WHERE restriction_type_id = 3
+                          AND value_text IS NOT NULL
+                          AND value_text <> ''
+                          AND (valid_from IS NOT NULL OR valid_to IS NOT NULL);
+                    """)

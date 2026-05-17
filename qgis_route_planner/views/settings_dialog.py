@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..controllers import SettingsDialogController
-    from ..data.models import SettingsModel
+    from qgis_route_planner.models import SettingsModel
     from ..data.vehicle import VehicleProfile
 
 from qgis.PyQt import QtCore, QtWidgets
@@ -47,6 +47,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__model.editing_mode_changed.connect(self.__on_editing_mode_changed)
         self.__model.current_profile_data_changed.connect(self.__on_current_profile_data_changed)
         self.__model.weather_settings_changed.connect(self.__on_weather_settings_changed)
+        self.__model.point_select_distance_changed.connect(self.__on_point_select_distance_changed)
 
         # Сигналы от view к контроллеру
         self.__editDbConButton.clicked.connect(self.__on_change_db_clicked)
@@ -61,6 +62,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__profilesListWidget.itemDoubleClicked.connect(self.__on_profile_double_clicked)
 
         self.__rebuildGraphButton.clicked.connect(self.__on_rebuild_graph_clicked)
+        self.__saveGraphSettingsButton.clicked.connect(self.__on_save_graph_settings_clicked)
         self.__checkServiceConButton.clicked.connect(self.__on_check_weather_clicked)
         self.__saveWeatherButton.clicked.connect(self.__on_save_weather_clicked)
 
@@ -309,6 +311,31 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         __spacerItem2 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.__verticalLayout_3.addItem(__spacerItem2)
+
+        self.__graphSettingsLayout = QtWidgets.QGroupBox(self.__tabGraph)
+        self.__graphSettingsInnerLayout = QtWidgets.QFormLayout()
+
+        self.__distanceLabel = QtWidgets.QLabel(self.__graphSettingsLayout)
+        self.__distanceLabel.setObjectName("distanceLabel")
+        self.__graphSettingsInnerLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__distanceLabel)
+
+        self.__distanceEdit = QtWidgets.QDoubleSpinBox(self.__graphSettingsLayout)
+        self.__distanceEdit.setObjectName("distanceEdit")
+        self.__distanceEdit.setMaximum(99.0)
+        self.__distanceEdit.setMinimum(0.1)
+        self.__distanceEdit.setSuffix(" м")
+        self.__graphSettingsInnerLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__distanceEdit)
+
+        self.__saveGraphSettingsButton = QtWidgets.QPushButton(self.__graphSettingsLayout)
+        self.__saveGraphSettingsButton.setObjectName("saveGraphSettingsButton")
+        self.__graphSettingsInnerLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__saveGraphSettingsButton)
+
+        self.__graphSettingsLayout.addItem(self.__graphSettingsInnerLayout)
+        self.__verticalLayout_3.addItem(self.__graphSettingsLayout)
+
+        __spacerItem3 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.__verticalLayout_3.addItem(__spacerItem3)
+
         self.__tabWidget.addTab(self.__tabGraph, "")
 
         self.__tabWeather = QtWidgets.QWidget()
@@ -456,6 +483,8 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__checkServiceConButton.setText(_translate("Dialog", "Проверить подключение"))
         self.__saveWeatherButton.setText(_translate("Dialog", "Сохранить"))
         self.__tabWidget.setTabText(self.__tabWidget.indexOf(self.__tabWeather), _translate("Dialog", "Сервис погоды"))
+        self.__saveGraphSettingsButton.setText(_translate("Dialog", "Сохранить"))
+        self.__distanceLabel.setText(_translate("Dialog", "Расстояние захвата точки:"))
 
     # Слоты для сигналов от контроллера
     def __open_dialog(self, page_index: int):
@@ -543,6 +572,10 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__summerSpeedSpinBox.setValue(float(settings.get("summer_avg_speed_kmh", 60.0)))
         self.__winterSpeedSpinBox.setValue(float(settings.get("winter_avg_speed_kmh", 45.0)))
 
+    @pyqtSlot(float)
+    def __on_point_select_distance_changed(self, value: float):
+        self.__distanceEdit.setValue(value)
+
     # Вспомогательные методы
     def __update_profiles_list(self, profiles_list: list[VehicleProfile], active_id: int | None):
         """ Обновить список профилей в UI"""
@@ -618,6 +651,11 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         if confirm_rebuild:
             self.__controller.rebuild_graph()
 
+    def __on_save_graph_settings_clicked(self):
+        self.__controller.save_graph_settings(
+            self.__distanceEdit.value()
+        )
+
     def __on_check_weather_clicked(self):
         """ Обработчик проверки подключения к погодному сервису """
         self.__controller.check_weather_connection(
@@ -628,7 +666,6 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __on_save_weather_clicked(self):
         """ Обработчик сохранения погодных настроек """
         self.__controller.save_weather_settings(
-            self.__urlLineEdit.text(),
             self.__keyLineEdit.text(),
             self.__fallbackSeasonComboBox.currentData(),
             self.__summerSpeedSpinBox.value(),

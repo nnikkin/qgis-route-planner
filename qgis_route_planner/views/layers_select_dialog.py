@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..controllers import InitDialogsController
-    from ..data.models import LayerConfigModel, Layer
+    from qgis_route_planner.models import LayerConfigModel, Layer
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
@@ -141,16 +141,16 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
-        self.setWindowTitle(_translate("Dialog", "Шаг 2: выбор таблицы"))
-        self.label.setText(_translate("Dialog", "Выберите слои с геометрией LineString из базы данных для обработки."))
+        self.setWindowTitle(_translate("Dialog", "Шаг 2: выбор слоёв"))
+        self.label.setText(_translate("Dialog", "Выберите слои из базы данных для обработки."))
         self.pushItemToTableButton.setText(_translate("Dialog", ">>"))
         self.pushItemToListButton.setText(_translate("Dialog", "<<"))
         item = self.tableWidget.horizontalHeaderItem(0)
-        item.setText(_translate("Dialog", "Название таблицы"))
+        item.setText(_translate("Dialog", "Название"))
         item = self.tableWidget.horizontalHeaderItem(1)
         item.setText(_translate("Dialog", "Тип геометрии"))
         item = self.tableWidget.horizontalHeaderItem(2)
-        item.setText(_translate("Dialog", "Роль слоя"))
+        item.setText(_translate("Dialog", "Назначение слоя"))
 
     def showEvent(self, event, **kwargs):
         super().showEvent(event)

@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
-from ...utils import FormMode
-from ..route.restriction_record import RestrictionRecord
+from qgis_route_planner.utils import FormMode
+from qgis_route_planner.data.route.restriction_record import RestrictionRecord
 from enum import Enum
 
 class RestrictionType(Enum):
@@ -17,6 +17,8 @@ class RestrictionType(Enum):
 
 
 class RestrictionModel(QObject):
+    """ Модель диалогового окна ограничений RestrictionDialog """
+
     restriction_type_changed = pyqtSignal(object)
     name_changed = pyqtSignal(str)
     comment_changed = pyqtSignal(str)

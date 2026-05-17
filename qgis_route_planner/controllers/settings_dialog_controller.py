@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from ..data.models import SettingsModel, FormMode
+    from qgis_route_planner.models import SettingsModel, FormMode
     from ..services import SettingsService
     from ..data.vehicle import VehicleType, VehicleProfile
 
@@ -23,6 +23,8 @@ class SettingsDialogController(BaseController):
     graph_rebuild_requested = pyqtSignal()
     weather_settings_saved = pyqtSignal(dict)
 
+    select_distance_setting_saved = pyqtSignal(float)
+
     active_profile_changed = pyqtSignal(object)
 
     def __init__(
@@ -40,10 +42,14 @@ class SettingsDialogController(BaseController):
         self.__load_initial_state()
         self.open_page_requested.emit(tab_index)
 
+    def get_select_point_distance(self):
+        return self.__model.point_select_distance
+
     def __load_initial_state(self):
         """ Загрузить начальное состояние """
         self.__load_db_params()
         self.__load_profiles()
+        self.__load_graph_settings()
         self.__load_weather_settings()
         self.__model.current_profile_id = None
         self.__model.current_profile_data = None
@@ -65,6 +71,12 @@ class SettingsDialogController(BaseController):
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профилей ТС: {e}")
 
+    def __load_graph_settings(self):
+        try:
+            self.__model.point_select_distance = self.__service.load_select_distance_setting()
+        except Exception as e:
+            self.show_error.emit(e)
+
     def __load_weather_settings(self):
         """ Загрузить настройки погодного сервиса в модель """
         try:
@@ -78,21 +90,23 @@ class SettingsDialogController(BaseController):
         self.reconnect_requested.emit()
 
     @pyqtSlot()
-    def reconnect_with_new_params(self):
-        """ Переподключение с новыми параметрами (будет вызвано из plugin_controller)"""
-
-        self.__load_db_params()
-        self.show_info.emit("Параметры подключения к БД обновлены")
-
-    @pyqtSlot()
     def rebuild_graph(self):
         """ Запросить перестроение графа """
         self.graph_rebuild_requested.emit()
 
+    @pyqtSlot(float)
+    def save_graph_settings(self, dist_value: float):
+        try:
+            self.__service.save_graph_settings(dist_value)
+            self.__load_graph_settings()
+            self.select_distance_setting_saved.emit(self.__model.point_select_distance)
+            self.show_info.emit("Настройки сохранены")
+        except Exception as e:
+            self.show_error.emit(f"Ошибка сохранения настроек графа: {e}")
+
     @pyqtSlot(str, str, str, float, float)
     def save_weather_settings(
             self,
-            api_url: str,
             api_key: str,
             fallback_season: str,
             summer_avg_speed_kmh: float,
@@ -110,9 +124,8 @@ class SettingsDialogController(BaseController):
                 summer_avg_speed_kmh,
                 winter_avg_speed_kmh,
             )
-            settings = self.__service.load_weather_settings()
-            self.__model.weather_settings = settings
-            self.weather_settings_saved.emit(settings)
+            self.__load_weather_settings()
+            self.weather_settings_saved.emit(self.__model.weather_settings)
             self.show_info.emit("Настройки погодного сервиса сохранены")
         except Exception as e:
             self.show_error.emit(f"Ошибка сохранения настроек погодного сервиса: {e}")

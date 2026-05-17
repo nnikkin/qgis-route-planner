@@ -10,7 +10,7 @@ from qgis.PyQt.QtGui import QRegExpValidator
 from qgis.PyQt.QtCore import Qt, QRegExp, QObject, QMetaObject, QCoreApplication, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
-from ..data.models import DbConfigModel
+from qgis_route_planner.models import DbConfigModel
 
 class ConnectionConfigDialog(QtWidgets.QDialog, MessageBoxMixin):
     """ Диалоговое окно подключения к БД """

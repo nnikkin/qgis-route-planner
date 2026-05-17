@@ -3,12 +3,12 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..services import RestrictionService
-    from ..data.models import RestrictionModel
+    from qgis_route_planner.models import RestrictionModel
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject, QDateTime
 from qgis.core import QgsPointXY
 
-from ..data.models import RestrictionType
+from qgis_route_planner.models import RestrictionType
 from ..data.route import RestrictionRecord
 from ..utils import FormMode
 

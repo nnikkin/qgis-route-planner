@@ -1,11 +1,11 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from ..vehicle import VehicleProfile
-from ...utils import FormMode
+from qgis_route_planner.data.vehicle import VehicleProfile
+from qgis_route_planner.utils import FormMode
 
 
 class SettingsModel(QObject):
-    """ Модель для хранения состояния окна настроек """
+    """ Модель для хранения состояния окна настроек SettingsDialog """
 
     # Сигналы для БД
     db_params_changed = pyqtSignal(object)
@@ -21,6 +21,8 @@ class SettingsModel(QObject):
     api_place_changed = pyqtSignal(float, float)
     weather_settings_changed = pyqtSignal(dict)
 
+    point_select_distance_changed = pyqtSignal(float)
+
     def __init__(self):
         super().__init__()
 
@@ -32,6 +34,7 @@ class SettingsModel(QObject):
         self.__editing_mode: FormMode = FormMode.EMPTY
         self.__current_profile_data: VehicleProfile = None
         self.__weather_settings: dict = {}
+        self.__point_select_distance: float = 0.1
 
     @property
     def db_params(self):
@@ -95,3 +98,13 @@ class SettingsModel(QObject):
     def weather_settings(self, value: dict):
         self.__weather_settings = value or {}
         self.weather_settings_changed.emit(self.__weather_settings)
+
+    @property
+    def point_select_distance(self):
+        return self.__point_select_distance
+
+    @point_select_distance.setter
+    def point_select_distance(self, value: float):
+        self.__point_select_distance = value
+        self.point_select_distance_changed.emit(value)
+

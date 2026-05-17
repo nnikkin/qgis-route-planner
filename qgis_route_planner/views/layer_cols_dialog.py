@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..controllers import InitDialogsController
-    from ..data.models import ColumnsConfigModel
-    from ..data.models.cols_config_model import ColumnInfo
+    from qgis_route_planner.models import ColumnsConfigModel
+    from qgis_route_planner.models import ColumnInfo
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot

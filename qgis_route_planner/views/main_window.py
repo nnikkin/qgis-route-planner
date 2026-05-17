@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..controllers import MainWindowController
-    from ..data.models import MainWindowModel
+    from qgis_route_planner.models import MainWindowModel
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import pyqtSlot
@@ -14,7 +14,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.core import (
     QgsGeometry, QgsPointXY, QgsWkbTypes, QgsVectorLayer,
     QgsPalLayerSettings, QgsVectorLayerSimpleLabeling,
-    QgsSimpleLineSymbolLayer, QgsLineSymbol, QgsMarkerSymbol
+    QgsMarkerSymbol
 )
 from qgis.gui import (
     QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
@@ -413,7 +413,6 @@ class PluginMainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         for layer in layers:
             if layer.geometryType() == QgsWkbTypes.LineGeometry:
                 from qgis.core import QgsSimpleLineSymbolLayer, QgsLineSymbol
-                from qgis.PyQt.QtGui import QColor
 
                 source = layer.dataProvider().dataSourceUri()
                 is_routing = '"routing"' in source or 'table=routing.' in source

@@ -1,44 +1,48 @@
+from __future__ import annotations
+
 import logging
 from qgis.core import QgsMessageLog, Qgis
 
 class Logger:
-    def __init__(self):
-        self.__logger = logging.getLogger()
-
-    def debug(self, msg: str, tag: str = ''):
-        self.__logger.debug(msg)
+    @staticmethod
+    def debug(msg: str, tag: str = ''):
+        logging.getLogger().debug(msg)
         QgsMessageLog.logMessage(
             f"DEBUG: {msg}",
             "QgisRoutePlanner",
             Qgis.MessageLevel.NoLevel,
         )
 
-    def info(self, msg: str):
-        self.__logger.info(msg)
+    @staticmethod
+    def info(msg: str):
+        logging.getLogger().info(msg)
         QgsMessageLog.logMessage(
             msg,
             "QgisRoutePlanner",
             Qgis.MessageLevel.Info,
         )
 
-    def warning(self, msg: str):
-        self.__logger.warning(msg)
+    @staticmethod
+    def warning(msg: str):
+        logging.getLogger().warning(msg)
         QgsMessageLog.logMessage(
             msg,
             "QgisRoutePlanner",
             Qgis.MessageLevel.Warning,
         )
 
-    def error(self, msg: str):
-        self.__logger.error(msg)
+    @staticmethod
+    def error(msg: str | Exception):
+        logging.getLogger().error(msg)
         QgsMessageLog.logMessage(
             f"ERROR: {msg}",
             "QgisRoutePlanner",
             Qgis.MessageLevel.Warning,
         )
 
-    def critical(self, msg: str):
-        self.__logger.critical(msg)
+    @staticmethod
+    def critical(msg: str):
+        logging.getLogger().critical(msg)
         QgsMessageLog.logMessage(
             msg,
             "QgisRoutePlanner",

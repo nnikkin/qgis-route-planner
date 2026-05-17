@@ -1,6 +1,6 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from ...utils import ColumnRole, GeometryType, LayerRole
+from qgis_route_planner.utils import ColumnRole, GeometryType, LayerRole
 from .layer_config_model import Layer
 
 from dataclasses import dataclass
@@ -11,6 +11,8 @@ class ColumnInfo:
     data_type: str | None = None
 
 class ColumnsConfigModel(QObject):
+    """ Модель, используемая LayerColumnsDialog """
+
     available_columns_changed = pyqtSignal(dict)
     mappings_changed = pyqtSignal(dict)
 

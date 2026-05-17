@@ -4,20 +4,20 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..controllers import RestrictionDialogController
-    from ..data.models import RestrictionModel
+    from qgis_route_planner.models import RestrictionModel
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QDateTime, QObject, QSize
 from qgis.PyQt.QtGui import QIcon
 
 from .message_box_mixin import MessageBoxMixin
-from ..data.models import RestrictionType
+from qgis_route_planner.models import RestrictionType
 from ..data.route import RestrictionRecord
 from ..utils import FormMode
 
 
 class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
-    """ Диалог организации ограничений """
+    """ Диалоговое окно организации ограничений """
 
     def __init__(
             self,

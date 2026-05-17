@@ -1,16 +1,17 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
+from ..utils.logger import Logger
+
 if TYPE_CHECKING:
-    from ..data.models.main_window_model import MainWindowModel
-    from ..data.models.restriction_model import RestrictionModel
+    from qgis_route_planner.models import MainWindowModel
+    from qgis_route_planner.models import RestrictionModel
     from .settings_dialog_controller import SettingsDialogController
     from .restriction_dialog_controller import RestrictionDialogController
     from ..services import SpatialDataService, RoutingService, RestrictionService
 
 from ..data.route import SelectedPointCollection, PointType
 
-from qgis.PyQt import Qt
 from qgis.PyQt.QtGui import QImage, QPainter
 from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal, QSize
 from qgis.core import QgsPointXY, QgsMapSettings, QgsMapRendererCustomPainterJob, QgsGeometry
@@ -84,7 +85,9 @@ class MainWindowController(BaseController):
         if visible:
             self.__restr_controller.refresh_restrictions()
             self.__update_visible_restrictions()
+            Logger.info("Ограничения отображаются на карте")
         else:
+            Logger.info("Ограничения скрыты с карты")
             self.restrictions_display_cleared.emit()
 
     def initialize_map(self, schema: str = "routing", selected_layers: list | None = None):
@@ -100,6 +103,7 @@ class MainWindowController(BaseController):
 
     @pyqtSlot(QgsPointXY)
     def on_map_point_selected(self, point: QgsPointXY):
+        self.__routing_service.set_point_select_distance(self.__settings_controller.get_select_point_distance())
         snapped = self.__routing_service.snap_point_to_road(point)
         if not snapped:
             self.__model.status_message = "error:snap"
@@ -181,7 +185,7 @@ class MainWindowController(BaseController):
             elif i == len(route) - 1:
                 action = "Финиш"
             else:
-                action = "Продолжать движение"
+                action = "Продолжайте движение"
             name = edge.get("name") or ""
             dist = edge.get("length_m", 0)
             rows += f"""
@@ -253,6 +257,7 @@ class MainWindowController(BaseController):
 
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(html)
+        Logger.info(f"Файл сохранён: {file_path}")
         return file_path
 
     def __export_route_image(self, route: list[dict],
@@ -334,17 +339,24 @@ class MainWindowController(BaseController):
             self.__model.active_profile
         )
 
+        p1 = f"Запрошено построение маршрутов из точки {start_node_id} в точку {end_node_id}"
+        p2 = f" с промежуточными точками {waypoint_ids}" if waypoint_ids else ""
+
+        Logger.info(p1 + p2)
+
         routes = self.__routing_service.calculate_routes(
             start_node_id, end_node_id,
             self.__model.active_profile, waypoint_ids, restriction_node_ids
         )
 
         if not routes:
+            Logger.info("Маршруты не найдены")
             self.__model.status_message = "error:no_routes"
             self.__model.routes = []
             self.routes_display_requested.emit([])
             return
 
+        Logger.info(f"Найдено маршрутов: {len(routes)}")
         self.__model.routes = routes
         self.__model.active_tab = 1
         self.routes_display_requested.emit(routes)
@@ -379,6 +391,7 @@ class MainWindowController(BaseController):
         return list(self.__restriction_points.keys())
 
     def snap_point(self, point: QgsPointXY):
+        self.__routing_service.set_point_select_distance(self.__settings_controller.get_select_point_distance())
         return self.__routing_service.snap_point_to_road(point)
 
     def __on_restrictions_changed(self, _restrictions: list):
