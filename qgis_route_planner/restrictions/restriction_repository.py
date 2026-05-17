@@ -11,72 +11,6 @@ class RestrictionRepository:
     def __init__(self, db: DbConnection):
         self.__db = db
 
-    def create_tables(self):
-        self.__db.execute_nonquery("CREATE SCHEMA IF NOT EXISTS routing")
-
-        self.__db.execute_nonquery("""
-            CREATE TABLE IF NOT EXISTS routing.restriction_types (
-                restriction_type_id SMALLINT PRIMARY KEY,
-                code TEXT UNIQUE NOT NULL
-            )
-        """)
-
-        self.__db.execute_nonquery("""
-            CREATE TABLE IF NOT EXISTS routing.restrictions (
-                restriction_id      BIGINT PRIMARY KEY,
-                restriction_type_id SMALLINT REFERENCES routing.restriction_types(restriction_type_id),
-                name                TEXT,
-                node_id             BIGINT,
-                value_num           DOUBLE PRECISION,
-                value_text          TEXT,
-                comment             TEXT DEFAULT '',
-                max_height_m        DOUBLE PRECISION,
-                max_width_m         DOUBLE PRECISION,
-                max_weight_t        DOUBLE PRECISION,
-                valid_from          TIMESTAMP,
-                valid_to            TIMESTAMP
-            )
-        """)
-
-        for col, definition in [
-            ("name", "TEXT"),
-            ("comment", "TEXT DEFAULT ''"),
-            ("max_height_m", "DOUBLE PRECISION"),
-            ("max_width_m", "DOUBLE PRECISION"),
-            ("max_weight_t", "DOUBLE PRECISION"),
-            ("valid_from", "TIMESTAMP"),
-            ("valid_to", "TIMESTAMP"),
-        ]:
-            self.__db.execute_nonquery(
-                f"ALTER TABLE routing.restrictions ADD COLUMN IF NOT EXISTS {col} {definition}"
-            )
-        self.__migrate_legacy_value_text()
-
-    def ensure_default_types(self):
-        self.create_tables()
-
-        existing = {row[0] for row in self.get_types()}
-        defaults = [
-            (RestrictionType.SIMPLE.value, RestrictionType.SIMPLE.name),
-            (RestrictionType.DIMENSION.value, RestrictionType.DIMENSION.name),
-            (RestrictionType.TEMPORARY.value, RestrictionType.TEMPORARY.name),
-        ]
-        for type_id, code in defaults:
-            if type_id in existing:
-                continue
-            try:
-                self.__db.execute_nonquery(
-                    """
-                    INSERT INTO routing.restriction_types
-                        (restriction_type_id, code)
-                    VALUES (%s, %s)
-                    ON CONFLICT (restriction_type_id) DO NOTHING
-                    """,
-                    type_id, code
-                )
-            except psycopg.errors.DuplicateColumn:
-                pass
-
     def __next_id(self) -> int:
         rows = self.__db.execute_query(
             "SELECT COALESCE(MAX(restriction_id), 0) + 1 FROM routing.restrictions"
@@ -84,25 +18,21 @@ class RestrictionRepository:
         return int(rows[0][0]) if rows else 1
 
     def get_all(self) -> list[dict]:
+        # Собираем данные из всех трех таблиц
         rows = self.__db.execute_query("""
             SELECT
                 r.restriction_id AS id,
-                r.restriction_type_id,
-                t.code AS restriction_type_code,
-                t.name AS restriction_type_name,
-                r.name,
+                r.restriction_name,
                 r.node_id,
-                r.value_num,
-                r.value_text,
-                COALESCE(r.comment, '') AS comment,
-                r.max_height_m,
-                r.max_width_m,
-                r.max_weight_t,
-                r.valid_from,
-                r.valid_to
+                COALESCE(r.user_comment, '') AS user_comment,
+                d.max_height_m,
+                d.max_width_m,
+                d.max_weight_t,
+                t.valid_from,
+                t.valid_to
             FROM routing.restrictions r
-            LEFT JOIN routing.restriction_types t
-                USING (restriction_type_id)
+            LEFT JOIN routing.dimension_restrictions d ON r.restriction_id = d.restriction_id
+            LEFT JOIN routing.temp_restrictions t ON r.restriction_id = t.restriction_id
             ORDER BY r.restriction_id DESC
         """)
         return [self.__row_to_dict(row) for row in rows]
@@ -112,22 +42,17 @@ class RestrictionRepository:
             """
             SELECT
                 r.restriction_id AS id,
-                r.restriction_type_id,
-                t.code AS restriction_type_code,
-                t.name AS restriction_type_name,
-                r.name,
+                r.restriction_name,
                 r.node_id,
-                r.value_num,
-                r.value_text,
-                COALESCE(r.comment, '') AS comment,
-                r.max_height_m,
-                r.max_width_m,
-                r.max_weight_t,
-                r.valid_from,
-                r.valid_to
+                COALESCE(r.user_comment, '') AS user_comment,
+                d.max_height_m,
+                d.max_width_m,
+                d.max_weight_t,
+                t.valid_from,
+                t.valid_to
             FROM routing.restrictions r
-            LEFT JOIN routing.restriction_types t
-                USING (restriction_type_id)
+            LEFT JOIN routing.dimension_restrictions d ON r.restriction_id = d.restriction_id
+            LEFT JOIN routing.temp_restrictions t ON r.restriction_id = t.restriction_id
             WHERE r.restriction_id = %s
             """,
             restriction_id,
@@ -135,58 +60,93 @@ class RestrictionRepository:
         return self.__row_to_dict(rows[0]) if rows else None
 
     def add_restriction(self, restriction: RestrictionRecord):
+        res_id = self.__next_id()
+
+        # Вставляем в базовую таблицу
         self.__db.execute_nonquery(
             """
-            INSERT INTO routing.restrictions
-                (restriction_id, restriction_type_id, name,
-                 node_id, value_num, value_text, comment,
-                 max_height_m, max_width_m, max_weight_t, valid_from, valid_to)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO routing.restrictions (restriction_id, restriction_name, node_id, user_comment)
+            VALUES (%s, %s, %s, %s)
             """,
-            self.__next_id(),
-            restriction.restriction_type_id,
+            res_id,
             restriction.name,
             restriction.node_id,
-            restriction.value_num,
-            restriction.value_text,
             restriction.comment or "",
-            restriction.max_height_m,
-            restriction.max_width_m,
-            restriction.max_weight_t,
-            restriction.valid_from,
-            restriction.valid_to,
         )
 
+        # Если есть габаритные данные, пишем в dimension_restrictions
+        if any([restriction.max_height_m, restriction.max_width_m, restriction.max_weight_t]):
+            self.__db.execute_nonquery(
+                """
+                INSERT INTO routing.dimension_restrictions (restriction_id, max_height_m, max_width_m, max_weight_t)
+                VALUES (%s, %s, %s, %s)
+                """,
+                res_id,
+                restriction.max_height_m,
+                restriction.max_width_m,
+                restriction.max_weight_t,
+            )
+
+        # Если есть временные рамки, пишем в temp_restrictions
+        if restriction.valid_from or restriction.valid_to:
+            self.__db.execute_nonquery(
+                """
+                INSERT INTO routing.temp_restrictions (restriction_id, valid_from, valid_to)
+                VALUES (%s, %s, %s)
+                """,
+                res_id,
+                restriction.valid_from,
+                restriction.valid_to,
+            )
+
     def upd_restriction(self, restriction_id: int, restriction: RestrictionRecord):
+        # Обновляем базовую таблицу
         self.__db.execute_nonquery(
             """
             UPDATE routing.restrictions
-            SET restriction_type_id = %s,
-                name = %s,
+            SET restriction_name = %s,
                 node_id = %s,
-                value_num = %s,
-                value_text = %s,
-                comment = %s,
-                max_height_m = %s,
-                max_width_m = %s,
-                max_weight_t = %s,
-                valid_from = %s,
-                valid_to = %s
+                user_comment = %s
             WHERE restriction_id = %s
             """,
-            restriction.restriction_type_id,
             restriction.name,
             restriction.node_id,
-            restriction.value_num,
-            restriction.value_text,
             restriction.comment or "",
-            restriction.max_height_m,
-            restriction.max_width_m,
-            restriction.max_weight_t,
-            restriction.valid_from,
-            restriction.valid_to,
             restriction_id,
         )
+
+        if any([restriction.max_height_m, restriction.max_width_m, restriction.max_weight_t]):
+            self.__db.execute_nonquery(
+                """
+                INSERT INTO routing.dimension_restrictions (restriction_id, max_height_m, max_width_m, max_weight_t)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (restriction_id) DO UPDATE
+                    SET max_height_m = EXCLUDED.max_height_m,
+                        max_width_m  = EXCLUDED.max_width_m,
+                        max_weight_t = EXCLUDED.max_weight_t
+                """,
+                restriction_id, restriction.max_height_m, restriction.max_width_m, restriction.max_weight_t
+            )
+        else:
+            self.__db.execute_nonquery(
+                "DELETE FROM routing.dimension_restrictions WHERE restriction_id = %s", restriction_id
+            )
+
+        if restriction.valid_from or restriction.valid_to:
+            self.__db.execute_nonquery(
+                """
+                INSERT INTO routing.temp_restrictions (restriction_id, valid_from, valid_to)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (restriction_id) DO UPDATE
+                    SET valid_from = EXCLUDED.valid_from,
+                        valid_to   = EXCLUDED.valid_to
+                """,
+                restriction_id, restriction.valid_from, restriction.valid_to
+            )
+        else:
+            self.__db.execute_nonquery(
+                "DELETE FROM routing.temp_restrictions WHERE restriction_id = %s", restriction_id
+            )
 
     def del_restriction(self, restriction_id: int):
         self.__db.execute_nonquery(
@@ -194,93 +154,22 @@ class RestrictionRepository:
             restriction_id
         )
 
-    def get_types(self) -> list:
-        return self.__db.execute_query(
-            """
-            SELECT restriction_type_id, code
-            FROM routing.restriction_types
-            ORDER BY restriction_type_id
-            """
-        )
-
     @staticmethod
     def __row_to_dict(row) -> dict:
         return {
             "id": row[0],
-            "restriction_type_id": row[1],
-            "restriction_type_code": row[2],
-            "restriction_type_name": row[3],
-            "name": row[4],
-            "node_id": row[5],
-            "value_num": row[6],
-            "value_text": row[7],
-            "comment": row[8],
-            "max_height_m": row[9],
-            "max_width_m": row[10],
-            "max_weight_t": row[11],
-            "valid_from": row[12],
-            "valid_to": row[13],
+            "name": row[1],
+            "node_id": row[2],
+            "comment": row[3],
+            "max_height_m": row[4],
+            "max_width_m": row[5],
+            "max_weight_t": row[6],
+            "valid_from": row[7],
+            "valid_to": row[8],
+            # Поля ниже возвращаем как None или пустые, чтобы не сломать внешние вызовы
+            "restriction_type_id": None,
+            "restriction_type_code": None,
+            "restriction_type_name": None,
+            "value_num": None,
+            "value_text": "",
         }
-
-    def __migrate_legacy_value_text(self):
-        self.__db.execute_nonquery("""
-                        UPDATE routing.restrictions
-                        SET
-                            max_height_m = COALESCE(
-                                max_height_m,
-                                NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
-                            ),
-                            max_width_m = COALESCE(
-                                max_width_m,
-                                NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
-                            ),
-                            max_weight_t = COALESCE(
-                                max_weight_t,
-                                NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision
-                            ),
-                            value_num = COALESCE(
-                                value_num,
-                                NULLIF(NULLIF(replace(substring(value_text from 'height=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
-                                NULLIF(NULLIF(replace(substring(value_text from 'width=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0),
-                                NULLIF(NULLIF(replace(substring(value_text from 'weight=([0-9]+[.,]?[0-9]*)'), ',', '.'), '')::double precision, 0)
-                            )
-                        WHERE restriction_type_id = 2
-                          AND value_text IS NOT NULL
-                          AND value_text LIKE '%%=%%';
-                    """)
-        self.__db.execute_nonquery("""
-                        UPDATE routing.restrictions
-                        SET value_text = ''
-                        WHERE restriction_type_id = 2
-                          AND value_text IS NOT NULL
-                          AND value_text <> ''
-                          AND (
-                              max_height_m IS NOT NULL
-                              OR max_width_m IS NOT NULL
-                              OR max_weight_t IS NOT NULL
-                          );
-                    """)
-
-        self.__db.execute_nonquery("""
-                        UPDATE routing.restrictions
-                        SET
-                            valid_from = COALESCE(
-                                valid_from,
-                                NULLIF(substring(value_text from 'from=([^;]+)'), '')::timestamp
-                            ),
-                            valid_to = COALESCE(
-                                valid_to,
-                                NULLIF(substring(value_text from 'to=([^;]+)'), '')::timestamp
-                            )
-                        WHERE restriction_type_id = 3
-                          AND value_text IS NOT NULL
-                          AND value_text LIKE '%%=%%';
-                    """)
-        self.__db.execute_nonquery("""
-                        UPDATE routing.restrictions
-                        SET value_text = ''
-                        WHERE restriction_type_id = 3
-                          AND value_text IS NOT NULL
-                          AND value_text <> ''
-                          AND (valid_from IS NOT NULL OR valid_to IS NOT NULL);
-                    """)

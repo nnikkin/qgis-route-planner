@@ -1,5 +1,5 @@
 import psycopg
-from psycopg import sql, DatabaseError
+from psycopg import sql, errors
 
 from qgis_route_planner.exceptions import DbConnectionError
 
@@ -17,15 +17,21 @@ class DbConnection:
 
     def __create_connection(self):
         """ Создание нового соединения """
-        kwargs = dict(
-            host=self.host,
-            port=self.port,
-            dbname=self.database,
-            user=self.username,
-            password=self.password,
-            connect_timeout=3  # 3 сек
-        )
-        return psycopg.connect(**kwargs)
+        try:
+            kwargs = dict(
+                host=self.host,
+                port=self.port,
+                dbname=self.database,
+                user=self.username,
+                password=self.password,
+                connect_timeout=3  # в секундах
+            )
+            return psycopg.connect(**kwargs)
+        except errors.ConnectionTimeout as e:
+            raise DbConnectionError(
+                "превышено время ожидания выполнения запроса",
+                operation="get_schemas"
+            ) from e
 
     def __apply_search_path(self, cursor):
         if self.schema:
@@ -62,14 +68,19 @@ class DbConnection:
                     """
             rows = self.execute_query(query)
             return [row[0] for row in rows]
-        except DatabaseError as e:
+        except errors.InvalidSchemaName as e:
             raise DbConnectionError(
-                f"не удалось получить список схем базы данных {e}",
+                f"указано неверное имя схемы",
+                operation="get_schemas"
+            ) from e
+        except errors.DatabaseError as e:
+            raise DbConnectionError(
+                f"не удалось получить список схем базы данных.",
                 operation="get_schemas"
             ) from e
         except Exception as e:
             raise DbConnectionError(
-                str(e),
+                f"не удалось получить список схем базы данных:\n{str(e)}",
                 operation="get_schemas"
             ) from e
 

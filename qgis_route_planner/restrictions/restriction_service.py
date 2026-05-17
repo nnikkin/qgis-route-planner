@@ -15,17 +15,6 @@ class RestrictionService:
     def __init__(self, restriction_repo: RestrictionRepository | None = None):
         self.__restriction_repo = restriction_repo
 
-    def run_init_database(self):
-        """ Инициализация БД """
-        try:
-            if self.__restriction_repo is not None:
-                self.__restriction_repo.ensure_default_types()
-        except psycopgError.Error as e:
-            raise DbConnectionError(
-                "Произошла ошибка при инициализации типов ограничений" + f"\n{e}",
-                operation="run_init_database"
-            ) from e
-
     def get_all_restrictions(self) -> list[dict]:
         """ Получить все ограничения из БД """
         try:
@@ -107,7 +96,6 @@ class RestrictionService:
     def create_restriction(self, data: dict | RestrictionRecord) -> bool:
         """ Создать ограничение """
         try:
-            self.__restriction_repo.ensure_default_types()
             record = data if isinstance(data, RestrictionRecord) else self.__dict_to_record(data)
             self.__restriction_repo.add_restriction(record)
             return True
@@ -120,7 +108,6 @@ class RestrictionService:
     def update_restriction(self, restr_id: int, data: dict | RestrictionRecord) -> bool:
         """ Обновить ограничение в БД """
         try:
-            self.__restriction_repo.ensure_default_types()
             record = data if isinstance(data, RestrictionRecord) else self.__dict_to_record(data)
             self.__restriction_repo.upd_restriction(restr_id, record)
             return True
@@ -133,7 +120,6 @@ class RestrictionService:
     def delete_restriction(self, restr_id: int) -> bool:
         """ Удалить ограничение """
         try:
-            self.__restriction_repo.ensure_default_types()
             self.__restriction_repo.del_restriction(restr_id)
             return True
         except PsycopgError as e:

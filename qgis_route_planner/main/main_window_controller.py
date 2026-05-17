@@ -219,8 +219,8 @@ class MainWindowController(QObject):
         Logger.info(p1 + p2)
 
         found_routes = self.__routing_service.calculate_routes(
-            start_node_id, end_node_id,
-            self.__active_profile, waypoint_ids, restriction_node_ids, self.__current_route.points
+            start_node_id, end_node_id, self.__model.active_profile, waypoint_ids, restriction_node_ids,
+            self.__current_route.points
         )
 
         if not found_routes:

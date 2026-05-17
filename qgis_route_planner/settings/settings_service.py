@@ -61,6 +61,7 @@ class SettingsService:
             username=username,
             password=password,
             database=database,
+            schema=schema
         )
         return db if db.is_complete() else None
 

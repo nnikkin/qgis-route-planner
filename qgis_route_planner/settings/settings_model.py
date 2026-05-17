@@ -13,9 +13,9 @@ class SettingsModel(QObject):
     # Сигналы для профилей
     profiles_changed = pyqtSignal(list)
     active_profile_id_changed = pyqtSignal(object)
-    current_profile_id_changed = pyqtSignal(object)
+    selected_profile_id_changed = pyqtSignal(object)
+    selected_profile_data_changed = pyqtSignal(object)
     editing_mode_changed = pyqtSignal(FormMode)
-    current_profile_data_changed = pyqtSignal(object)
 
     api_credentials_changed = pyqtSignal(str, str)
     api_place_changed = pyqtSignal(float, float)
@@ -30,9 +30,9 @@ class SettingsModel(QObject):
 
         self.__profiles: list[ProfileDto] = []
         self.__active_profile_id: int = None
-        self.__current_profile_id: int = None
+        self.__selected_profile_id: int = None
+        self.__selected_profile_data: ProfileDto = None
         self.__editing_mode: FormMode = FormMode.EMPTY
-        self.__current_profile_data: ProfileDto = None
         self.__weather_settings: dict = {}
         self.__point_select_distance: float = 0.1
 
@@ -64,13 +64,13 @@ class SettingsModel(QObject):
         self.active_profile_id_changed.emit(value)
 
     @property
-    def current_profile_id(self) -> int:
-        return self.__current_profile_id
+    def selected_profile_id(self) -> int:
+        return self.__selected_profile_id
 
-    @current_profile_id.setter
-    def current_profile_id(self, value: int):
-        self.__current_profile_id = value
-        self.current_profile_id_changed.emit(value)
+    @selected_profile_id.setter
+    def selected_profile_id(self, value: int):
+        self.__selected_profile_id = value
+        self.selected_profile_id_changed.emit(value)
 
     @property
     def editing_mode(self) -> FormMode:
@@ -83,12 +83,12 @@ class SettingsModel(QObject):
 
     @property
     def current_profile_data(self) -> ProfileDto:
-        return self.__current_profile_data
+        return self.__selected_profile_data
 
     @current_profile_data.setter
     def current_profile_data(self, value: ProfileDto):
-        self.__current_profile_data = value
-        self.current_profile_data_changed.emit(value)
+        self.__selected_profile_data = value
+        self.selected_profile_data_changed.emit(value)
 
     @property
     def weather_settings(self) -> dict:
@@ -109,7 +109,7 @@ class SettingsModel(QObject):
         self.point_select_distance_changed.emit(value)
 
     def is_last_profile(self) -> bool:
-        return len(self.__profiles) > 0
+        return len(self.__profiles) == 1
 
     def is_active_profile(self, profile_id: int) -> bool:
         return self.__active_profile_id == profile_id

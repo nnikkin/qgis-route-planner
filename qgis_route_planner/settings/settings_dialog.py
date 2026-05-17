@@ -43,9 +43,9 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__model.db_params_changed.connect(self.__on_db_params_changed)
         self.__model.profiles_changed.connect(self.__on_profiles_changed)
         self.__model.active_profile_id_changed.connect(self.__on_active_profile_changed)
-        self.__model.current_profile_id_changed.connect(self.__on_current_profile_changed)
-        self.__model.editing_mode_changed.connect(self.__on_editing_mode_changed)
-        self.__model.current_profile_data_changed.connect(self.__on_current_profile_data_changed)
+        self.__model.selected_profile_id_changed.connect(self.__on_current_profile_changed)
+        self.__model.editing_mode_changed.connect(self.__on_profile_editing_mode_changed)
+        self.__model.selected_profile_data_changed.connect(self.__on_current_profile_data_changed)
         self.__model.weather_settings_changed.connect(self.__on_weather_settings_changed)
         self.__model.point_select_distance_changed.connect(self.__on_point_select_distance_changed)
 
@@ -415,7 +415,6 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__retranslateUi()
         self.__tabWidget.setCurrentIndex(0)
-        QtCore.QMetaObject.connectSlotsByName(self)
         self.__connect()
 
         self.setTabOrder(self.__tabWidget, self.__dbHostnameEdit)
@@ -493,6 +492,12 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __open_dialog(self, page_index: int):
         """ Открыть диалог на указанной вкладке """
         self.__tabWidget.setCurrentIndex(page_index)
+
+        self.__on_db_params_changed(self.__model.db_params)
+        self.__on_profiles_changed(self.__model.profiles)
+        self.__on_weather_settings_changed(self.__model.weather_settings)
+        self.__on_point_select_distance_changed(self.__model.point_select_distance)
+
         self.show()
 
     def __confirm_delete_profile(self, profile_name: str):
@@ -527,15 +532,31 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         """ Обновить отображение активного профиля в списке """
         self.__update_profiles_list(self.__model.profiles, profile_id)
 
+    def __select_item_by_profile_id(self, profile_id: int | None):
+        """ Выделение элемента без перерисовки списка """
+        if profile_id is None:
+            self.__profilesListWidget.clearSelection()
+            return
+
+        for i in range(self.__profilesListWidget.count()):
+            item = self.__profilesListWidget.item(i)
+            if item.data(QtCore.Qt.ItemDataRole.UserRole) == profile_id:
+                self.__profilesListWidget.setCurrentItem(item)
+                break
+
     @pyqtSlot(object)
     def __on_current_profile_changed(self, profile_id: int):
         """ Выделить профиль в списке """
-        self.__select_profile_in_list(profile_id)
+        self.__select_item_by_profile_id(profile_id)
 
     @pyqtSlot(FormMode)
-    def __on_editing_mode_changed(self, mode: FormMode):
+    def __on_profile_editing_mode_changed(self, mode: FormMode):
         """ Обновить состояние формы редактирования """
         is_editing = mode == FormMode.EDIT or mode == FormMode.CREATE
+
+        if mode == FormMode.CREATE:
+            self.__clear_profile_form()
+
         self.__profileNameEdit.setEnabled(is_editing)
         self.__vehicleTypeComboBox.setEnabled(is_editing)
         self.__profileHeightSpinBox.setEnabled(is_editing)
@@ -546,7 +567,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__cancelProfileEditButton.setEnabled(is_editing)
 
         # Кнопки управления списком
-        has_selection = self.__model.current_profile_id is not None
+        has_selection = self.__model.selected_profile_id is not None
         self.__editProfileButton.setEnabled(has_selection and not is_editing)
         self.__deleteProfileButton.setEnabled(has_selection and not is_editing)
         self.__setActiveProfileButton.setEnabled(has_selection and not is_editing)
@@ -581,7 +602,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     # Вспомогательные методы
     def __update_profiles_list(self, profiles_list: list[ProfileDto], active_id: int | None):
         """ Обновить список профилей в UI"""
-        current_profile_id = self.__model.current_profile_id
+        selected_profile_id = self.__model.selected_profile_id
         self.__profilesListWidget.blockSignals(True)
         self.__profilesListWidget.clear()
 
@@ -590,40 +611,22 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
             item = QtWidgets.QListWidgetItem(display_name)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, profile.id)
             self.__profilesListWidget.addItem(item)
-            if profile.id == current_profile_id:
-                self.__profilesListWidget.setCurrentItem(item)
+
+        self.__select_item_by_profile_id(self.__model.selected_profile_id)
 
         self.__profilesListWidget.blockSignals(False)
-
-    def __select_profile_in_list(self, profile_id: int | None):
-        """ Выделить профиль в списке """
-        if profile_id is None:
-            self.__profilesListWidget.clearSelection()
-            return
-
-        for i in range(self.__profilesListWidget.count()):
-            item = self.__profilesListWidget.item(i)
-            if item.data(QtCore.Qt.ItemDataRole.UserRole) == profile_id:
-                self.__profilesListWidget.setCurrentItem(item)
-                break
 
     def __set_profile_form(self, profile: ProfileDto):
         """ Заполнить форму данными профиля """
         self.__profileNameEdit.setText(profile.name)
 
         index = self.__vehicleTypeComboBox.findData(profile.type)
-        if index < 0:
-            try:
-                index = self.__vehicleTypeComboBox.findData(VehicleType[profile.type])
-            except KeyError:
-                index = -1
-        if index >= 0:
-            self.__vehicleTypeComboBox.setCurrentIndex(index)
+        self.__vehicleTypeComboBox.setCurrentIndex(index)
 
-        self.__profileHeightSpinBox.setValue(profile.height_m)
-        self.__profileWidthSpinBox.setValue(profile.width_m)
-        self.__profileWeightSpinBox.setValue(profile.weight_t)
-        self.__profileDepthSpinBox.setValue(profile.depth_m)
+        self.__profileHeightSpinBox.setValue(profile.height)
+        self.__profileWidthSpinBox.setValue(profile.width)
+        self.__profileWeightSpinBox.setValue(profile.weight)
+        self.__profileDepthSpinBox.setValue(profile.depth)
 
     def __clear_profile_form(self):
         """ Очистить форму профиля """

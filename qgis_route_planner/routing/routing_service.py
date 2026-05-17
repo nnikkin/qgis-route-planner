@@ -8,6 +8,7 @@ from qgis_route_planner.exceptions import WeatherServiceError, NodeNotFoundError
 from .selected_point_collection import SelectedPointCollection
 from .graph_provider import GraphProvider
 from .weather_service import WeatherService
+from ..vehicle import VehicleProfile
 
 
 class RoutingService:
@@ -85,7 +86,7 @@ class RoutingService:
             self,
             start_node_id: int,
             end_node_id: int,
-            profile_details: dict[str, float],
+            profile: VehicleProfile,
             waypoints_ids: list[int] = None,
             restriction_nodes: list[int] = None,
             route_points: list = None
@@ -120,7 +121,7 @@ class RoutingService:
 
         try:
             routes = self.__graph_provider.get_routes(
-                start_node_id, end_node_id, profile_details,
+                start_node_id, end_node_id, profile,
                 waypoints_ids, route_points, restriction_nodes,
                 route_speed_kmh=route_speed_kmh
             )
