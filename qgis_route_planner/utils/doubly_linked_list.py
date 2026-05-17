@@ -68,7 +68,7 @@ class DoublyLinkedList:
         return None
 
     def sort_by_order(self):
-        """Простая сортировка вставками"""
+        """ Простая сортировка вставками """
         if not self.head or not self.head.next:
             return
 

@@ -16,6 +16,9 @@ class MainWindowModel(QObject):
     active_tab_changed = pyqtSignal(int)
     clear_button_enabled_changed = pyqtSignal(bool)
 
+    restriction_select_mode_activated = pyqtSignal(bool)
+    restrictions_visible_changed = pyqtSignal(bool)
+
     def __init__(self):
         super().__init__()
         self.__points: list[RoutePoint] = []
@@ -25,6 +28,8 @@ class MainWindowModel(QObject):
         self.__status_message: str = ""
         self.__active_tab: int = 0
         self.__clear_button_enabled: bool = False
+        self.__restriction_select_mode: bool = False
+        self.__restrictions_visible: bool = False
 
     @property
     def points(self) -> list[RoutePoint]:
@@ -91,6 +96,25 @@ class MainWindowModel(QObject):
     def clear_button_enabled(self, value: bool):
         self.__clear_button_enabled = value
         self.clear_button_enabled_changed.emit(value)
+
+    @property
+    def restriction_select_mode(self) -> bool:
+        return self.__restriction_select_mode
+
+    @restriction_select_mode.setter
+    def restriction_select_mode(self, value: bool):
+        self.__restriction_select_mode = value
+        self.restriction_select_mode_activated.emit(value)
+
+    @property
+    def restrictions_visible(self) -> bool:
+        return self.__restrictions_visible
+
+    @restrictions_visible.setter
+    def restrictions_visible(self, value: bool):
+        if self.__restrictions_visible != value:
+            self.__restrictions_visible = value
+            self.restrictions_visible_changed.emit(value)
 
     def clear(self):
         self.points = []

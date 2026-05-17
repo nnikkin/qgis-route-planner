@@ -43,3 +43,7 @@ class LayerConfigModel(QObject):
     def update_layer(self, layer: Layer, index: int):
         self.__selected_layers[index] = layer
         self.layers_changed.emit(self.__selected_layers)
+
+    def clear(self):
+        self.__selected_layers = []
+        self.layers_changed.emit(self.__selected_layers)

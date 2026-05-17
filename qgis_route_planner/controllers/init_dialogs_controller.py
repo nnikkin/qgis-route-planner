@@ -49,17 +49,6 @@ class InitDialogsController(BaseController):
         self.__service = None
         self.con_test_requested.emit()
 
-    def __create_connection(self):
-        self.con_test_requested.emit()
-        print(
-            self.__db_config_model.host,
-            self.__db_config_model.port,
-            self.__db_config_model.username,
-            self.__db_config_model.password,
-            self.__db_config_model.database
-        )
-
-
 # для DbConnectionSetupDialog
     @pyqtSlot(str)
     def change_host_value(self, new_value: str):
@@ -108,6 +97,9 @@ class InitDialogsController(BaseController):
 # для SelectLayersDialog
     @pyqtSlot()
     def get_layers(self) -> list[str]:
+        if self.__service is None:
+            self.layer_selection_failed.emit("Не удалось подключиться.\nВернитесь к настройке подключения.")
+            return []
         return self.__service.get_tables(self.__db_config_model.schema)
 
     @pyqtSlot(str, object, object)
@@ -149,6 +141,7 @@ class InitDialogsController(BaseController):
             self.__columns_config_model.set_available_columns(layer.name, columns)
 
         self.layers_selected.emit()
+
 
 # для TableColumnsConfigDialog
     @pyqtSlot()
