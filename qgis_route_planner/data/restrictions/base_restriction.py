@@ -1,0 +1,2 @@
+class BaseRestriction:
+    pass

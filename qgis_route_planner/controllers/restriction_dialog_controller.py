@@ -1,10 +1,10 @@
 from qgis.PyQt.QtCore import QObject, pyqtSignal, Qt
 from qgis.PyQt.QtWidgets import QListWidgetItem, QMessageBox
 
-from qgis_route_planner.models.restrictions.restriction_record import RestrictionRecord
-from qgis_route_planner.repositories.db_connection import DbConnection
-from qgis_route_planner.services.restriction_service import RestrictionService
-from qgis_route_planner.views.settings_view import SettingsDialog
+from ..data.restrictions import RestrictionRecord
+from ..repositories import DbConnection
+from ..services import RestrictionService
+from ..views import SettingsDialog
 
 
 class RestrictionWindowController(QObject):

@@ -1,193 +1,162 @@
-from qgis_route_planner.repositories.db_connection import DbConnection
-from qgis_route_planner.services.database_service import DatabaseService
-from qgis_route_planner.views.table_cols_view import TableColumnsConfigDialog
-from qgis_route_planner.views.select_layers_view import *
-from qgis_route_planner.views.dbcon_setup_view import DbConnectionSetupDialog
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject
 
-from qgis.PyQt.QtWidgets import QMessageBox, QDialog
-from qgis.PyQt.QtCore import pyqtSignal, QObject
+from ..data.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel
+from ..utils import ColumnRole, GeometryType, LayerRole
+from ..services import SpatialDataService
+
 
 class InitDialogsController(QObject):
-    """Контроллер окон инициализации модуля (DbConnectionSetupDialog и SelectLayersDialog)"""
+    con_test_requested = pyqtSignal()
+    con_params_obtained = pyqtSignal()
+    layers_selected = pyqtSignal()
+    columns_configured = pyqtSignal()
 
-    # Сигналы
-    db_connection_created = pyqtSignal(DbConnection)
-    db_connection_test = pyqtSignal(DbConnection)
-    layers_selected = pyqtSignal(list)
-    initialization_finished = pyqtSignal(list, dict)
+    connection_failed = pyqtSignal(str)
+    layer_selection_failed = pyqtSignal(str)
+    column_config_failed = pyqtSignal(str)
     init_cancelled = pyqtSignal()
 
-    def __init__(self, db_service: DatabaseService = None):
+    def __init__(
+            self,
+            db_config_model: DbConfigModel,
+            layer_config_model: LayerConfigModel,
+            columns_config_model: ColumnsConfigModel,
+            service: SpatialDataService = None,
+    ):
         super().__init__()
 
-        self.__db_connection: DbConnection = None
-        self.__selected_layers: list[tuple[str, GeometryType]] = list()
+        self.__db_config_model: DbConfigModel = db_config_model
+        self.__layer_config_model: LayerConfigModel = layer_config_model
+        self.__columns_config_model: ColumnsConfigModel = columns_config_model
 
-        self.__db_service = db_service
+        self.__service = service
 
-        self.__db_init_view = DbConnectionSetupDialog()
-        self.__layer_select_view = SelectLayersDialog()
-        self.__table_cols_view = None
+    def set_service(self, service: SpatialDataService):
+        self.__service = service
 
-        self.__connect_signals()
-
-    def __connect_signals(self):
-        self.__db_init_view.host_edit.textChanged.connect(self.__on_text_changed)
-        self.__db_init_view.database_edit.textChanged.connect(self.__on_text_changed)
-        self.__db_init_view.port_edit.textChanged.connect(self.__on_text_changed)
-        self.__db_init_view.username_edit.textChanged.connect(self.__on_text_changed)
-        self.__db_init_view.password_edit.textChanged.connect(self.__on_text_changed)
-        self.__db_init_view.check_con_button.clicked.connect(self.__on_check_button_click)
-
-        self.__db_init_view.buttonBox.accepted.connect(self.__on_accept_button_click_dbview)
-        self.__layer_select_view.buttonBox.accepted.connect(self.__on_accept_button_click_layerview)
-        self.__db_init_view.buttonBox.rejected.connect(lambda: self.__on_reject_button_click(self.__db_init_view))
-        self.__layer_select_view.buttonBox.rejected.connect(lambda: self.__on_reject_button_click(self.__layer_select_view))
-
-    def set_db_service(self, db_service: DatabaseService):
-        self.__db_service = db_service
-
-    def __on_text_changed(self):
-        host_value = self.__db_init_view.host_edit.text()
-        port_value = self.__db_init_view.port_edit.text()
-        username_value = self.__db_init_view.username_edit.text()
-        password_value = self.__db_init_view.password_edit.text()
-        database_value = self.__db_init_view.database_edit.text()
-
-        are_fields_filled = all(x for x in (host_value, port_value, database_value, username_value,password_value))
-
-        self.__db_init_view.check_con_button.setEnabled(are_fields_filled)
-
-        self.__db_init_view.schema_comboBox.clear()
-        self.__db_init_view.schema_comboBox.setEnabled(False)
-
-    def __on_check_button_click(self):
-        self.__db_init_view.schema_comboBox.setEnabled(False)
-
-        self.__db_connection = DbConnection(
-            host=self.__db_init_view.host_edit.text(),
-            database=self.__db_init_view.database_edit.text(),
-            port=self.__db_init_view.port_edit.text(),
-            username=self.__db_init_view.username_edit.text(),
-            password=self.__db_init_view.password_edit.text()
-        )
-
-        if self.__db_connection.test_connection():
-            self.db_connection_test.emit(self.__db_connection)
-        else:
-            QMessageBox.critical(
-                self.__db_init_view,
-                "Ошибка",
-                "Не удалось подключиться к базе данных.\nПроверьте правильность введённых данных.",
-                QMessageBox.Ok,
-            )
-            return
-
-
-    def fill_schema_combobox(self):
-        schemas = self.__db_service.get_all_schemas()
-        self.__db_init_view.schema_comboBox.clear()
-        self.__db_init_view.schema_comboBox.addItems([i[0] for i in schemas])
-        self.__db_init_view.schema_comboBox.setEnabled(True)
-
-    def start_init_process(self):
-        self.__db_init_view.exec()
-
-    def __on_accept_button_click_dbview(self):
-        selected_schema = self.__db_init_view.schema_comboBox.currentText()
-        self.__db_connection = DbConnection(
-            host=self.__db_init_view.host_edit.text(),
-            database=self.__db_init_view.database_edit.text(),
-            port=self.__db_init_view.port_edit.text(),
-            username=self.__db_init_view.username_edit.text(),
-            password=self.__db_init_view.password_edit.text(),
-            schema=selected_schema
-        )
-
-        if not self.__db_connection.has_required_params():
-            QMessageBox.information(
-                self.__db_init_view,
-                "",
-                "Заполните все поля, затем нажмите \"Проверить подключение\" и выберите схему из списка.",
-                QMessageBox.Ok,
-            )
-            return
-
-        self.db_connection_created.emit(self.__db_connection)
-
-        # следующий шаг настройки
-        # получаем все таблицы по схеме
-        tables_list = self.__db_service.get_all_tables(self.__db_connection.schema)
-
-        if len(tables_list) == 0:
-            QMessageBox.warning(
-                self.__db_init_view,
-                "",
-                "В выбранной схеме отсутствуют таблицы."
-            )
-            return
-
-        table_names = [row[0] for row in tables_list]
-        self.__layer_select_view.fill_list(table_names)
-
-        self.__db_init_view.hide()
-        self.__show_layer_select_dialog()
-
-    def __on_accept_button_click_layerview(self):
-        selected_layers = self.__layer_select_view.get_table_rows()
-
-        has_linestring = any(layer_type == GeometryType.LINESTRING for _, layer_type in selected_layers)
-
-        if not has_linestring:
-            QMessageBox.warning(
-                self.__layer_select_view,
-                "",
-                "Для продолжения необходимо выбрать хотя бы одну таблицу с геометрией типа LineString.",
-                QMessageBox.Ok,
-            )
-            return
-
-        self.__selected_layers = selected_layers
-        self.layers_selected.emit(self.__selected_layers)
-        self.__show_table_columns_dialog()
-
-    def __show_table_columns_dialog(self):
-        table_columns = {}
-
-        try:
-            for table_name, _ in self.__selected_layers:
-                table_columns[table_name] = self.__db_service.get_table_columns(table_name)
-        except Exception as e:
-            QMessageBox.critical(
-                self.__layer_select_view,
-                "Ошибка",
-                f"Не удалось получить список столбцов выбранных таблиц:\n{e}",
-                QMessageBox.Ok,
-            )
-            return
-
-        self.__layer_select_view.initialization_completed = True
-        self.__layer_select_view.hide()
-
-        self.__table_cols_view = TableColumnsConfigDialog(
-            selected_layers=self.__selected_layers,
-            table_columns=table_columns,
-        )
-        self.__table_cols_view.buttonBox.accepted.connect(self.__on_accept_button_click_tablecols_view)
-        self.__table_cols_view.buttonBox.rejected.connect(lambda: self.__on_reject_button_click(self.__table_cols_view))
-        self.__table_cols_view.exec()
-
-    def __show_layer_select_dialog(self):
-        self.__layer_select_view.exec()
-
-    def __on_accept_button_click_tablecols_view(self):
-        mapped_columns = self.__table_cols_view.mapped_columns
-        if mapped_columns is None:
-            mapped_columns = self.__table_cols_view.get_mapped_columns()
-
-        self.__table_cols_view.close()
-        self.initialization_finished.emit(self.__selected_layers, mapped_columns)
-
-    def __on_reject_button_click(self, parent):
-        parent.close()
+    @pyqtSlot()
+    def initialization_cancelled(self):
         self.init_cancelled.emit()
+
+    @pyqtSlot()
+    def request_connection(self):
+        self.__service = None
+        self.con_test_requested.emit()
+
+    def __create_connection(self):
+        self.con_test_requested.emit()
+        print(
+            self.__db_config_model.host,
+            self.__db_config_model.port,
+            self.__db_config_model.username,
+            self.__db_config_model.password,
+            self.__db_config_model.database
+        )
+
+
+# для DbConnectionSetupDialog
+    @pyqtSlot(str)
+    def change_host_value(self, new_value: str):
+        self.__db_config_model.host = new_value
+
+    @pyqtSlot(str)
+    def change_port_value(self, new_value: str):
+        self.__db_config_model.port = new_value
+
+    @pyqtSlot(str)
+    def change_username_value(self, new_value: str):
+        self.__db_config_model.username = new_value
+
+    @pyqtSlot(str)
+    def change_password_value(self, new_value: str):
+        self.__db_config_model.password = new_value
+
+    @pyqtSlot(str)
+    def change_database_value(self, new_value: str):
+        self.__db_config_model.database = new_value
+
+    @pyqtSlot(str)
+    def change_schema_value(self, new_value: str):
+        self.__db_config_model.schema = new_value
+
+    @pyqtSlot()
+    def validate_values_for_schema(self):
+        return self.__db_config_model.validate_values_for_schema()
+
+    @pyqtSlot()
+    def validate_connection_step(self):
+        return self.__db_config_model.validate_all_values()
+
+    @pyqtSlot()
+    def get_schemas(self) -> list[str]:
+        if self.__service is None:
+            self.connection_failed.emit("Не удалось подключиться.\nПроверьте правильность введённых данных.")
+            return []
+        return self.__service.get_schemas()
+
+    @pyqtSlot()
+    def connection_step_finish(self):
+        self.con_params_obtained.emit()
+
+
+# для SelectLayersDialog
+    @pyqtSlot()
+    def get_layers(self) -> list[str]:
+        return self.__service.get_tables(self.__db_config_model.schema)
+
+    @pyqtSlot(str, GeometryType, LayerRole)
+    def add_layer_to_config(self, layer_name: str, geom_type: GeometryType, layer_role: LayerRole):
+        self.__layer_config_model.add_layer(layer_name, geom_type, layer_role)
+
+    @pyqtSlot(int)
+    def remove_layer_from_config(self, index: int):
+        if 0 <= index < len(self.__layer_config_model.selected_layers):
+            self.__layer_config_model.pop_layer(index)
+
+    @pyqtSlot(int, GeometryType)
+    def change_geometry_type(self, index: int, new_type: GeometryType):
+        layer = self.__layer_config_model.selected_layers[index]
+        layer.geom_type = new_type
+        self.__layer_config_model.update_layer(layer, index)
+
+    @pyqtSlot(int, LayerRole)
+    def change_layer_role(self, index: int, new_role: LayerRole):
+        layer = self.__layer_config_model.selected_layers[index]
+        layer.role = new_role
+        self.__layer_config_model.update_layer(layer, index)
+
+    @pyqtSlot()
+    def layer_select_step_finish(self):
+        if not self.__layer_config_model.selected_layers:
+            self.layer_selection_failed.emit("Выберите слои.")
+            return
+
+        if not self.__layer_config_model.check_for_linestring():
+            self.layer_selection_failed.emit("Для продолжения необходим хотя бы один слой с геометрией LineString.")
+            return
+
+        selected_layers = self.__layer_config_model.selected_layers
+        self.__columns_config_model.set_layers(selected_layers)
+
+        for layer in selected_layers:
+            columns = self.__service.get_table_columns(layer.name)
+            self.__columns_config_model.set_available_columns(layer.name, columns)
+
+        self.layers_selected.emit()
+
+# для TableColumnsConfigDialog
+    @pyqtSlot()
+    def change_column_info(self, table_name: str, col_name: str | None, role: ColumnRole):
+        self.__columns_config_model.set_mapping(table_name, role, col_name)
+
+    @pyqtSlot()
+    def column_setup_step_finish(self):
+        is_valid, errors = self.__columns_config_model.validate_required_mappings()
+        if not is_valid:
+            self.column_config_failed.emit(
+                "Для линейных слоёв необходимо сопоставить обязательные поля:\n"
+                + "\n".join(errors)
+            )
+            return
+
+        self.columns_configured.emit()

@@ -1,9 +1,7 @@
-from qgis_route_planner.repositories.base_repository import BaseRepository
-from qgis_route_planner.repositories.db_connection import DbConnection
+from ..repositories import DbConnection
 
-class LayerRepository(BaseRepository):
+class LayerRepository:
     def __init__(self, db: DbConnection):
-        super().__init__(db)
         self.__db = db
 
     @property
@@ -21,7 +19,7 @@ class LayerRepository(BaseRepository):
                 FROM geometry_columns
                     WHERE f_table_schema = %s
         """
-        return self._db.execute_query(query, [schema])
+        return self.__db.execute_query(query, schema)
 
     def get_table_columns(self, table_name: str) -> list:
         if self.__db.schema:
@@ -32,7 +30,7 @@ class LayerRepository(BaseRepository):
                             AND table_schema = %s
                 ORDER BY ordinal_position
             """
-            return self.execute_query(query, [table_name, self.__db.schema])
+            return self.__db.execute_query(query, table_name, self.__db.schema)
 
         query = """
             SELECT column_name, data_type
@@ -40,7 +38,7 @@ class LayerRepository(BaseRepository):
                   WHERE table_name = %s
             ORDER BY ordinal_position
         """
-        return self.execute_query(query, [table_name])
+        return self.__db.execute_query(query, table_name)
 
     def get_layer_extent(self, table_name: str) -> tuple | tuple[int, int, int, int]:
         query = f"""
@@ -51,7 +49,7 @@ class LayerRepository(BaseRepository):
                         FROM {table_name}
             ) as subquery
         """
-        result = self.execute_query(query)
+        result = self.__db.execute_query(query)
         if result:
             return result[0]
         return 0, 0, 0, 0
@@ -62,9 +60,9 @@ class LayerRepository(BaseRepository):
                 FROM information_schema.schemata
                 WHERE
                     schema_name NOT IN ('information_schema', 'pg_catalog') AND
-                    schema_name NOT LIKE 'pg_%' AND schema_name <> 'routing';
+                    schema_name NOT LIKE 'pg_%%' AND schema_name <> 'routing';
          """
-        return self.execute_query(query)
+        return self.__db.execute_query(query)
 
     def get_all_tables(self, schema: str) -> list[tuple]:
         query = """
@@ -75,4 +73,4 @@ class LayerRepository(BaseRepository):
                     table_name <> 'spatial_ref_sys' AND
                     table_type = 'BASE TABLE';
         """
-        return self.execute_query(query, [schema])
+        return self.__db.execute_query(query, schema)

@@ -1,6 +1,5 @@
-from qgis_route_planner.models.restrictions.restriction_record import RestrictionRecord
-from qgis_route_planner.repositories.db_connection import DbConnection
-from qgis_route_planner.repositories.restriction_repository import RestrictionRepository
+from ..data.restrictions import RestrictionRecord
+from ..repositories import DbConnection, RestrictionRepository
 
 
 class RestrictionService:

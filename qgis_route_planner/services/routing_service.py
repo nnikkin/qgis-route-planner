@@ -2,8 +2,9 @@ from qgis.core import QgsPointXY
 
 from qgis.PyQt.QtWidgets import QMessageBox
 
-from qgis_route_planner.models.route.selected_point_collection import SelectedPointCollection
-from qgis_route_planner.repositories.graph_repository import RoadGraphRepository
+from ..data.route import SelectedPointCollection
+from ..data.vehicle import VehicleProfile
+from ..repositories import RoadGraphRepository
 
 
 class RoutingService:
@@ -57,8 +58,8 @@ class RoutingService:
 
         return None
 
-    def calculate_route(self, start_node_id: int, end_node_id: int, waypoints_ids: list[int] = None) -> list[dict] | None:
-        """Вычисляет маршрут между двумя узлами"""
+    def calculate_routes(self, start_node_id: int, end_node_id: int, profile: VehicleProfile,
+                         waypoints_ids: list[int] = None) -> list[list[dict]] | None:
         try:
             if not self.__graph_repo:
                 QMessageBox.critical(
@@ -69,11 +70,17 @@ class RoutingService:
                 )
                 return None
 
-            route = self.__graph_repo.get_route(start_node_id, end_node_id, waypoints_ids)
-            self.__current_route = route
-            return route
+            routes = self.__graph_repo.get_routes(start_node_id, end_node_id, profile, waypoints_ids)
+
+            if routes:
+                self.__current_route = routes[0]
+                return routes
+            else:
+                print(f"Пути из точки с node_id={start_node_id} в точку с node_id={end_node_id} не найдены!")
+                return None
         except Exception as e:
-            print(f"Error calculating route: {e}")
+            import traceback
+            print(f"Произошла ошибка при расчёте маршрута: {e}\n{traceback.format_exc()}")
             return None
 
     def get_route_info(self, route: list[dict]) -> dict:
@@ -85,13 +92,12 @@ class RoutingService:
                 'time_minutes': 0,
                 'segments': 0
             }
-        total_distance = sum(edge['cost'] for edge in route)
-        total_time = total_distance / 60
+        total_distance = sum(edge['length_m'] for edge in route)
+        total_time = sum(edge['cost'] for edge in route)
 
         return {
             'distance_km': total_distance / 1000,
-            'time_hours': total_time / 60,
-            'time_minutes': total_time,
+            'time_minutes': total_time / 60,
             'segments': len(route)
         }
 

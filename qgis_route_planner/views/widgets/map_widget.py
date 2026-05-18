@@ -10,10 +10,12 @@ from qgis.gui import (
     QgsMapCanvas
 )
 
-import qgis_route_planner.resources
+from qgis_route_planner import resources
+
 
 class MapWidget(QgsMapCanvas):
     """Виджет карты для главного окна"""
+
     def __init__(self):
         super().__init__()
         self.__layers = []
@@ -29,23 +31,23 @@ class MapWidget(QgsMapCanvas):
         self.__btns_layout = QVBoxLayout(self.__map_controls)
 
         self.__btn_zoom_in = QPushButton(self)
-        self.__btn_zoom_in.setIcon(QIcon(QPixmap(":plugins/qgis_route_planner/png_resources/icons/magnifier-zoom-in.png")))
+        self.__btn_zoom_in.setIcon(QIcon(QPixmap(":map_icons/map_zoomin")))
         self.__btn_zoom_in.setToolTip("Увеличить масштаб")
 
         self.__btn_zoom_out = QPushButton(self)
-        self.__btn_zoom_out.setIcon(QIcon(QPixmap(":plugins/qgis_route_planner/png_resources/icons/magnifier-zoom-out.png")))
+        self.__btn_zoom_out.setIcon(QIcon(QPixmap(":map_icons/map_zoomout")))
         self.__btn_zoom_out.setToolTip("Уменьшить масштаб")
 
         self.__btn_pan_mode = QPushButton(self)
-        self.__btn_pan_mode.setIcon(QIcon(QPixmap(":plugins/qgis_route_planner/png_resources/icons/arrow-move.png")))
+        self.__btn_pan_mode.setIcon(QIcon(QPixmap(":map_icons/map_move")))
         self.__btn_pan_mode.setToolTip("Включить перемещение по карте")
 
         self.__btn_select_points_mode = QPushButton(self)
-        self.__btn_select_points_mode.setIcon(QIcon(QPixmap(":plugins/qgis_route_planner/png_resources/icons/marker.png")))
+        self.__btn_select_points_mode.setIcon(QIcon(QPixmap(":map_icons/map_add_point")))
         self.__btn_select_points_mode.setToolTip("Выбрать точки маршрута")
 
         self.__btn_activate_restr_mode = QPushButton(self)
-        self.__btn_activate_restr_mode.setIcon(QIcon(QPixmap(":plugins/qgis_route_planner/png_resources/icons/prohibition-button.png")))
+        self.__btn_activate_restr_mode.setIcon(QIcon(QPixmap(":map_icons/map_restrict")))
         self.__btn_activate_restr_mode.setToolTip("Задать ограничения")
 
         for btn in (self.__btn_zoom_in, self.__btn_pan_mode, self.__btn_zoom_out, self.__btn_select_points_mode,

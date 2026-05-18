@@ -2,18 +2,15 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QAction, QCursor
 from qgis.PyQt.QtWidgets import QListWidgetItem, QMenu, QMessageBox
 
-from qgis.core import QgsGeometry, QgsPointXY, QgsWkbTypes
+from qgis.core import QgsGeometry, QgsPointXY, QgsWkbTypes, QgsPalLayerSettings, QgsVectorLayerSimpleLabeling
 from qgis.gui import QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
 
-from qgis_route_planner.models.route.route_point import RoutePoint
-from qgis_route_planner.models.vehicle.vehicle_profile import VehicleProfile
-from qgis_route_planner.services.database_service import DatabaseService
-from qgis_route_planner.views.main_view import PluginMainWindow
-from qgis_route_planner.views.widgets.select_point_map_tool import SelectPointMapTool
-from qgis_route_planner.services.routing_service import RoutingService
-from qgis_route_planner.controllers.settings_window_controller import SettingsWindowController
-from qgis_route_planner.models.route.point_type import PointType
-from qgis_route_planner.models.route.selected_point_collection import SelectedPointCollection
+from ..data.vehicle import VehicleProfile
+from ..data.route import RoutePoint, PointType, SelectedPointCollection
+from ..services import SpatialDataService, RoutingService
+from ..views import PluginMainWindow
+from ..views.widgets import SelectPointMapTool
+from .settings_window_controller import SettingsWindowController
 
 
 class MainWindowController:
@@ -22,10 +19,11 @@ class MainWindowController:
     def __init__(
             self,
             settings_controller: SettingsWindowController,
-            db_service: DatabaseService,
-            routing_service: RoutingService
+            db_service: SpatialDataService,
+            routing_service: RoutingService,
+            main_window: PluginMainWindow | None = None,
     ):
-        self.__main_window: PluginMainWindow = PluginMainWindow()
+        self.__main_window: PluginMainWindow = main_window
         self.__settings_controller: SettingsWindowController = settings_controller
         self.__connected: bool = False
 
@@ -35,8 +33,10 @@ class MainWindowController:
         self.__active_vehicle_profile: VehicleProfile = None
         self.__current_route: SelectedPointCollection = SelectedPointCollection()
         self.__current_route_result: list[dict] = []
+        self.__current_routes_data: list[list[dict]] = []
+
         self.__point_markers: dict[int, QgsVertexMarker] = {}
-        self.__route_band: list[QgsRubberBand] = []
+        self.__route_bands: list[list[QgsRubberBand]] = []
         self.__temp_node_id: int = None
 
         self.__point_zoom_in = QgsMapToolZoom(self.__main_window.mapView, False)
@@ -51,10 +51,11 @@ class MainWindowController:
         # -- ГЛАВНОЕ МЕНЮ --
         self.__main_window.db_action.triggered.connect(self.__settings_controller.open_settings_dialog)
         self.__main_window.profiles_action.triggered.connect(lambda: self.__settings_controller.open_settings_dialog(1))
-        self.__main_window.profiles_action.triggered.connect(lambda: self.__settings_controller.open_settings_dialog(1))
+        self.__main_window.graph_action.triggered.connect(lambda: self.__settings_controller.open_settings_dialog(2))
         self.__main_window.about_action.triggered.connect(self.__open_about_dialog)
 
         # -- ИНСТРУМЕНТЫ КАРТЫ --
+        self.__main_window.route_list_widget.route_selected.connect(self.__highlight_routes)
         self.__main_window.mapView.zoom_in_btn.clicked.connect(self.__zoom_in)
         self.__main_window.mapView.zoom_out_btn.clicked.connect(self.__zoom_out)
         self.__main_window.mapView.pan_btn.clicked.connect(self.__pan)
@@ -62,12 +63,17 @@ class MainWindowController:
         #self.__main_window.mapView.activate_restr_mode_btn.clicked.connect(self.__)
 
         # -- ДРУГИЕ КНОПКИ ОКНА --
-        self.__main_window.clear_list_button.clicked.connect(self.clear_all_points)
+        self.__main_window.clear_list_button.clicked.connect(self.clear_everything)
         self.__point_select_tool.pointClicked.connect(self.__on_map_point_selected)
         #self.__restr_edit_tool.pointClicked.connect(lambda: self.__on_map_point_selected(restriction_mode=True))
+        self.__main_window.route_list_widget.route_save_requested.connect(self.__save_route)
 
         self.__settings_controller.profile_changed.connect(
             self.__on_active_profile_changed
+        )
+
+        self.__settings_controller.profile_deleted.connect(
+            self.__on_profile_deleted
         )
 
     def __open_about_dialog(self):
@@ -86,10 +92,18 @@ class MainWindowController:
             QMessageBox.Ok
         )
 
-    def clear_routes_list(self):
+    def clear_everything(self):
+        self.clear_map()
+        self.__clear_routes_list()
+        self.__clear_points_list()
+        self.__current_route.clear()
+
+        self.__main_window.set_tab_active(0)
+
+    def __clear_routes_list(self):
         self.__main_window.clear_routes_list()
 
-    def clear_points_list(self):
+    def __clear_points_list(self):
         self.__main_window.clear_points_list()
 
     def open_main_window(self):
@@ -106,15 +120,26 @@ class MainWindowController:
 
     def initialize_map(self, schema: str = "routing"):
         try:
-            layers = self.__db_service.load_all_spatial_layers(schema=schema)
+            layers = self.__db_service.get_spatial_layers(schema=schema)
             if not layers:
-                print(f"No layers loaded from schema '{schema}'")
+                print(f"В схеме '{schema}' не обнаружены таблицы с геоданными!")
                 return
 
             self.__main_window.mapView.set_layers(layers)
+
+            for layer in layers:
+                if 'graph_edges' in layer.name() and layer.fields().indexOf('name') >= 0:
+                    settings = QgsPalLayerSettings()
+                    settings.fieldName = 'name'
+                    settings.enabled = True
+                    labeling = QgsVectorLayerSimpleLabeling(settings)
+                    layer.setLabelsEnabled(True)
+                    layer.setLabeling(labeling)
+                    layer.triggerRepaint()
+
             print("Слои загружены.")
         except Exception as e:
-            print(f"Failed to initialize map: {e}")
+            print(f"Не удалось инициализировать виджет карты: {e}")
 
     def __on_map_point_selected(self, point: QgsPointXY):
         snapped = self.__routing_service.snap_point_to_road(point)
@@ -158,48 +183,19 @@ class MainWindowController:
 
         menu.exec_(QCursor.pos())
 
-    """
-    def __create_point_restriction(self, point: QgsPointXY, node_id: int | None):
-        if node_id is None:
-            node_id = self.__routing_service.find_nearest_node(point)
-
-        if node_id is None:
-            QMessageBox.warning(
-                self.__main_window,
-                "Ошибка",
-                "Не удалось определить node_id для точки.\nПожалуйста, выберите точку ближе к дороге.",
-            )
-            return
-        
-        restriction_types = self.__restriction_service.get_restriction_types()
-        if not restriction_types:
-            QMessageBox.warning(
-                self.__main_window,
-                "Ошибка",
-                "Список типов ограничений недоступен. Проверьте подключение к базе данных.",
-            )
-            return
-
-        dialog = PointRestrictionDialog(node_id=node_id, restriction_types=restriction_types, parent=self.__main_window)
-        if dialog.exec_() != QDialog.Accepted:
-            return
-
-        try:
-            self.__restriction_service.create_restriction(dialog.get_restriction())
-            QMessageBox.information(
-                self.__main_window,
-                "Готово",
-                "Ограничение для точки создано.",
-            )
-        except Exception as e:
-            QMessageBox.critical(
-                self.__main_window,
-                "Ошибка",
-                f"Не удалось сохранить ограничение: {str(e)}",
-            )
-    """
-
     def __add_route_point(self, qgs_point_xy: QgsPointXY, point_type: PointType, node_id: int | None):
+        if not self.__active_vehicle_profile:
+            q = QMessageBox.question(
+                self.__main_window,
+                "Внимание",
+                "Сначала создайте и выберите профиль транспортного средства, для которого будет произведён расчёт."
+                "\nВы хотите перейти в настройки модуля?",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if q == QMessageBox.Yes:
+                self.__settings_controller.open_settings_dialog(1)
+            return
+
         # Попытаемся найти ближайшую точку на графе
         if node_id is None:
             node_id = self.__routing_service.find_nearest_node(qgs_point_xy)
@@ -218,7 +214,7 @@ class MainWindowController:
         self.__add_point_marker(route_point, point_type)
         self.__update_points_list()
 
-        self.__try_build_route()
+        self.__try_build_routes()
 
     def __add_point_marker(self, route_point: RoutePoint, point_type: PointType):
         marker = QgsVertexMarker(self.__main_window.mapView)
@@ -240,7 +236,7 @@ class MainWindowController:
         elif route_point.point_type == PointType.END:
             marker.setColor(Qt.red)
         else:
-            marker.setColor(Qt.blue)
+            marker.setColor(Qt.black)
 
     def __update_points_list(self):
         self.__main_window.points_list_widget.clear()
@@ -264,62 +260,82 @@ class MainWindowController:
         if point:
             self.__update_marker_color(point)
 
-    def __display_route(self, route: list):
+    def __display_routes(self, routes: list):
         self.__clear_route()
-        if not route:
+        if not routes:
             return
 
-        bands = []
+        self.__current_routes_data = routes
         extent = None
-        for edge in route:
-            geom = QgsGeometry.fromWkt(edge["geom"])
-            if geom.isNull():
-                continue
 
-            route_band = QgsRubberBand(self.__main_window.mapView, QgsWkbTypes.LineGeometry)
-            route_band.setColor(Qt.blue)
-            route_band.setWidth(3)
-            route_band.setToGeometry(geom, None)
-            bands.append(route_band)
+        for i, route in enumerate(routes):
+            route_layers = []
+            for edge in route:
+                geom = QgsGeometry.fromWkt(edge["geom"])
 
-            if extent is None:
-                extent = geom.boundingBox()
-            else:
-                extent.combineExtentWith(geom.boundingBox())
+                if geom.isNull():
+                    continue
 
-        if not bands:
-            return
+                route_band = QgsRubberBand(self.__main_window.mapView, QgsWkbTypes.LineGeometry)
+                route_band.setColor(Qt.gray)
+                route_band.setWidth(3)
+                route_band.setToGeometry(geom, None)
+                route_layers.append(route_band)
 
-        self.__route_band = bands
-        self.__current_route_result = route
+                if extent is None:
+                    extent = geom.boundingBox()
+                else:
+                    extent.combineExtentWith(geom.boundingBox())
+
+            self.__route_bands.append(route_layers)
 
         if extent:
             self.__main_window.mapView.setExtent(extent)
 
+        self.__highlight_routes(0)
         self.__main_window.mapView.refresh()
 
-    def __show_route_info(self, route):
+    def __highlight_routes(self, route_to_highlight_idx: int):
+        for i, layers in enumerate(self.__route_bands):
+            for band in layers:
+                band.setColor(Qt.darkGray if i != route_to_highlight_idx else Qt.blue)
+                band.setWidth(3 if i != route_to_highlight_idx else 5)
+                band.setZValue(0 if i != route_to_highlight_idx else 1)
+
+        self.__main_window.mapView.refresh()
+
+    def __show_route_info(self, route_order: int, route: list[dict]):
         info = self.__routing_service.get_route_info(route)
-        self.__main_window.display_route_info(route, info)
+        self.__main_window.route_list_widget.add_page(route_order, route, info)
 
     def __clear_route(self):
-        if self.__route_band:
-            for band in self.__route_band:
-                self.__main_window.mapView.scene().removeItem(band)
-            self.__route_band = []
-        self.__current_route_result = []
+        if self.__route_bands:
+            for band_list in self.__route_bands:
+                for band in band_list:
+                    self.__main_window.mapView.scene().removeItem(band)
+            self.__route_bands = []
+        self.__current_routes_data = []
         self.__main_window.clear_routes_list()
 
-    def __try_build_route(self):
+    def __try_build_routes(self):
         if not self.__current_route.has_required_points():
             self.__clear_route()
             return
 
+        self.__turn_off_map_tool()
+
         point_ids = self.__current_route.get_point_ids()
         waypoint_ids = point_ids[1:-1]
-        route = self.__routing_service.calculate_route(point_ids[0], point_ids[-1], waypoint_ids)
+        start_node_id = point_ids[0]
+        end_node_id = point_ids[-1]
 
-        if route is None or len(route) == 0:
+        routes = self.__routing_service.calculate_routes(
+            start_node_id,
+            end_node_id,
+            self.__active_vehicle_profile,
+            waypoint_ids
+        )
+        if not routes:
             QMessageBox.information(
                 self.__main_window,
                 "",
@@ -328,8 +344,13 @@ class MainWindowController:
             )
             return
         else:
-            self.__display_route(route)
-            self.__show_route_info(route)
+            self.__display_routes(routes)
+            self.__main_window.clear_routes_list()
+            self.__main_window.set_tab_active(1)
+
+            for i, route in enumerate(routes):
+                self.__show_route_info(i, route)
+
 
     def __remove_point(self, point_id: int):
         point = self.__current_route.remove_point(point_id)
@@ -341,13 +362,12 @@ class MainWindowController:
             self.__main_window.mapView.scene().removeItem(marker)
 
         self.__update_points_list()
-        self.__try_build_route()
+        self.__try_build_routes()
 
-    def clear_all_points(self):
+    def clear_map(self):
         for marker in self.__point_markers.values():
             self.__main_window.mapView.scene().removeItem(marker)
         self.__point_markers.clear()
-        self.__current_route.clear()
         self.__clear_route()
         self.__update_points_list()
 
@@ -358,7 +378,7 @@ class MainWindowController:
 
         self.__update_marker_for_point(point_id)
         self.__update_points_list()
-        self.__try_build_route()
+        self.__try_build_routes()
 
     def __get_active_profile(self):
         return self.__active_vehicle_profile
@@ -366,19 +386,71 @@ class MainWindowController:
     def __on_active_profile_changed(self, profile: VehicleProfile | None):
         self.__active_vehicle_profile = profile
 
-        if profile:
+        if self.__active_vehicle_profile:
             self.__main_window.statusBar().showMessage(
                 f"Активный профиль: {profile.name}"
             )
-        else:
+
+        if self.__current_route_result:
+            self.__try_build_routes()
+
+    def __on_profile_deleted(self, profile_id: int):
+        if self.__active_vehicle_profile.id == profile_id:
+            self.__active_vehicle_profile = None
             self.__main_window.statusBar().showMessage(
                 "Профиль не выбран"
             )
 
-        if self.__current_route_result:
-            self.__try_build_route()
+    def __generate_instructions(self, route: list) -> str:
+        """Генерирует текстовые инструкции по маршруту"""
+        if not route:
+            return "Нет инструкций"
+        instructions = []
+        total_distance = 0
+        for i, edge in enumerate(route):
+            total_distance += edge['cost']
+            distance_km = total_distance / 1000
+            if i == 0:
+                action = "Старт"
+            elif i == len(route) - 1:
+                action = "Финиш"
+            else:
+                action = "Продолжать движение"
 
-# -- ИНСТРУМЕНТЫ ДЛЯ КАРТЫ --
+            instructions.append(f"""
+            <tr>
+                <td>{i + 1}.</td>
+                <td>
+                    <span font-size: 11px;">
+                        Проехать: {distance_km:.2f} км
+                    </span>
+                </td>
+            </tr>
+            """)
+
+        return "".join(instructions)
+
+    def __save_route(self, route_index: int):
+        if route_index < 0 or route_index >= len(self.__current_routes_data):
+            return
+
+        from qgis.PyQt.QtWidgets import QFileDialog
+
+        route = self.__current_routes_data[route_index]
+        file_url, filter = QFileDialog.getSaveFileUrl(
+            self.__main_window,
+            "Выберите место для сохранения файла",
+            "",
+            "HTML-файл (*.html)",
+            None,
+            QFileDialog.Option.ShowDirsOnly
+        )
+
+        if file_url is None:
+            return
+
+
+    # -- ИНСТРУМЕНТЫ ДЛЯ КАРТЫ --
     def __zoom_in(self):
         self.__main_window.mapView.setMapTool(self.__point_zoom_in)
 
@@ -387,3 +459,6 @@ class MainWindowController:
 
     def __pan(self):
         self.__main_window.mapView.setMapTool(self.__point_pan)
+
+    def __turn_off_map_tool(self):
+        self.__main_window.mapView.setMapTool(None)
