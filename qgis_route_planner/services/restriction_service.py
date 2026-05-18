@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from psycopg.errors import Error as PsycopgError
 
 from qgis_route_planner.models import RestrictionType
-from ..data.route import RestrictionRecord
-from ..data.vehicle import VehicleProfile
+from ..data import RestrictionRecord, VehicleProfile
 from ..exceptions import DbConnectionError
 from ..repositories import RestrictionRepository
 
@@ -19,7 +19,7 @@ class RestrictionService:
         try:
             self.__restriction_repo.ensure_default_types()
             return self.__restriction_repo.get_all()
-        except DbConnectionError as e:
+        except PsycopgError as e:
             raise DbConnectionError(
                 "Не удалось получить список всех ограничений, связанных с графом",
                 operation="get_all_restrictions"
@@ -29,7 +29,7 @@ class RestrictionService:
         try:
             self.__restriction_repo.ensure_default_types()
             return self.__restriction_repo.get_by_id(restriction_id)
-        except DbConnectionError as e:
+        except PsycopgError as e:
             raise DbConnectionError(
                 f"Не удалось получить список ограничение по ID {restriction_id}",
                 operation="get_restriction_by_id"
@@ -64,7 +64,7 @@ class RestrictionService:
             record = data if isinstance(data, RestrictionRecord) else self.__dict_to_record(data)
             self.__restriction_repo.add_restriction(record)
             return True
-        except DbConnectionError as e:
+        except PsycopgError as e:
             raise DbConnectionError(
                 "Не удалось создать ограничение",
                 operation="create_restriction"
@@ -76,7 +76,7 @@ class RestrictionService:
             record = data if isinstance(data, RestrictionRecord) else self.__dict_to_record(data)
             self.__restriction_repo.upd_restriction(restriction_id, record)
             return True
-        except DbConnectionError as e:
+        except PsycopgError as e:
             raise DbConnectionError(
                 f"Не удалось обновить ограничение с ID {restriction_id}",
                 operation="update_restriction"
@@ -87,7 +87,7 @@ class RestrictionService:
             self.__restriction_repo.ensure_default_types()
             self.__restriction_repo.del_restriction(restriction_id)
             return True
-        except DbConnectionError as e:
+        except PsycopgError as e:
             raise DbConnectionError(
                 f"Не удалось удалить ограничение с ID {restriction_id}",
                 operation="create_restriction"

@@ -3,12 +3,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qgis_route_planner.models import SettingsModel, FormMode
     from ..services import SettingsService
-    from ..data.vehicle import VehicleType, VehicleProfile
+    from ..data import VehicleType, VehicleProfile
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 
-from ..utils import FormMode
-from ..data.vehicle import VehicleProfile
+from ..enums import FormMode
+from ..data import VehicleProfile
 from ..services.weather_service import WeatherService
 from .base_controller import BaseController
 

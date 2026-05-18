@@ -213,8 +213,11 @@ help/source/
 ../pb_tool.cfg
 ../pylintrc
 ../Makerfile
+../qgis_route_planner.zip
+../create_zip.ps1
 *.bat
 *.ui
-*.ps1
+*.qrc
 *.zip
 *.qrc
+*.ps1

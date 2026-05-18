@@ -1,7 +1,7 @@
 from qgis.PyQt.QtCore import pyqtSignal, QObject
 
-from qgis_route_planner.data.vehicle import VehicleProfile
-from qgis_route_planner.utils import FormMode
+from qgis_route_planner.data import VehicleProfile
+from qgis_route_planner.enums import FormMode
 
 
 class SettingsModel(QObject):

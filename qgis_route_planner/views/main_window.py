@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
+    from ..data import RoutePoint
     from ..controllers import MainWindowController
     from qgis_route_planner.models import MainWindowModel
 
@@ -20,7 +21,7 @@ from qgis.gui import (
     QgsMapToolPan, QgsMapToolZoom, QgsRubberBand, QgsVertexMarker
 )
 
-from ..data.route import RoutePoint, PointType
+from ..data import PointType
 from .widgets.map_widget import MapWidget
 from .widgets.route_list_widget import RouteListWidget
 from .message_box_mixin import MessageBoxMixin

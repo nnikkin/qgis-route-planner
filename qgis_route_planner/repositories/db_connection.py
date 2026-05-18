@@ -1,8 +1,6 @@
 import psycopg
 from psycopg import sql
 
-from qgis_route_planner.utils.logger import Logger
-
 
 class DbConnection:
     """ Низкоуровневый класс для работы с БД """

@@ -1,7 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from ..utils.logger import Logger
+from qgis_route_planner.logger import Logger
+from ..exceptions import DataImportError
 
 if TYPE_CHECKING:
     from qgis_route_planner.models import MainWindowModel
@@ -10,7 +11,7 @@ if TYPE_CHECKING:
     from .restriction_dialog_controller import RestrictionDialogController
     from ..services import SpatialDataService, RoutingService, RestrictionService
 
-from ..data.route import SelectedPointCollection, PointType
+from ..data import SelectedPointCollection, PointType
 
 from qgis.PyQt.QtGui import QImage, QPainter
 from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal, QSize
@@ -91,15 +92,12 @@ class MainWindowController(BaseController):
             self.restrictions_display_cleared.emit()
 
     def initialize_map(self, schema: str = "routing", selected_layers: list | None = None):
-        try:
-            layers = self.__data_service.get_spatial_layers(schema=schema)
-            if selected_layers:
-                layers.extend(self.__data_service.get_selected_spatial_layers(selected_layers))
-            if not layers:
-                raise BaseException(f"В схеме '{schema}' не обнаружены таблицы с геоданными!")
-            self.layers_obtained.emit(layers)
-        except Exception as e:
-            raise BaseException(f"Не удалось получить слои: {e}")
+        layers = self.__data_service.get_spatial_layers(schema=schema)
+        if selected_layers:
+            layers.extend(self.__data_service.get_selected_spatial_layers(selected_layers))
+        if not layers:
+            raise DataImportError(f"В схеме '{schema}' не обнаружены таблицы с геоданными")
+        self.layers_obtained.emit(layers)
 
     @pyqtSlot(QgsPointXY)
     def on_map_point_selected(self, point: QgsPointXY):
@@ -346,7 +344,7 @@ class MainWindowController(BaseController):
 
         routes = self.__routing_service.calculate_routes(
             start_node_id, end_node_id,
-            self.__model.active_profile, waypoint_ids, restriction_node_ids
+            self.__model.active_profile, waypoint_ids, restriction_node_ids, self.__current_route.points
         )
 
         if not routes:

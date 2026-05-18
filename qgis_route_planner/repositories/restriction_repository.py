@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import psycopg.errors
 
-from ..data.route import RestrictionRecord
+from ..data import RestrictionRecord
 from ..repositories import DbConnection
 
 

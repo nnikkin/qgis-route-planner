@@ -10,7 +10,7 @@ from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
-from ..utils import ColumnRole
+from ..enums import ColumnRole
 
 
 class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):

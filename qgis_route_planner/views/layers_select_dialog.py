@@ -9,7 +9,7 @@ from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
-from ..utils import GeometryType, LayerRole
+from ..enums import GeometryType, LayerRole
 
 
 class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):

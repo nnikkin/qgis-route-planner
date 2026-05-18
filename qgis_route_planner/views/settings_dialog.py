@@ -4,14 +4,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..controllers import SettingsDialogController
     from qgis_route_planner.models import SettingsModel
-    from ..data.vehicle import VehicleProfile
+    from ..data import VehicleProfile
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from .message_box_mixin import MessageBoxMixin
-from ..utils import FormMode
-from ..data.vehicle import VehicleType
+from ..enums import FormMode, VehicleType
 
 
 class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -612,7 +611,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         index = self.__vehicleTypeComboBox.findData(profile.type)
         if index < 0 and isinstance(profile.type, str):
             try:
-                from ..data.vehicle import VehicleType
+                from ..enums import VehicleType
                 index = self.__vehicleTypeComboBox.findData(VehicleType[profile.type])
             except KeyError:
                 index = -1

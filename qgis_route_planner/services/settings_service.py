@@ -3,7 +3,8 @@ from __future__ import annotations
 import psycopg.errors as psycopgError
 from qgis.PyQt.QtCore import QSettings
 
-from ..data.vehicle import VehicleProfile, VehicleType
+from ..data import VehicleProfile
+from ..enums import VehicleType
 from ..exceptions import RoutingPluginError, ProfileOperationError
 from ..repositories import DbConnection, VehicleProfileRepository
 
@@ -116,21 +117,20 @@ class SettingsService:
     def save_graph_settings(self, point_sel_dist: float):
         try:
             self.__settings.beginGroup(self.__GROUP_GRAPH)
-            self.__settings.setValue(self.__KEY_POINT_SELECT_DIST, point_sel_dist, self.__DEFAULT_POINT_SELECT_DIST)
+            self.__settings.setValue(self.__KEY_POINT_SELECT_DIST, point_sel_dist or self.__DEFAULT_POINT_SELECT_DIST)
             self.__settings.endGroup()
             self.__settings.sync()
         except Exception as e:
             raise RoutingPluginError(f" {str(e)}") from e
 
-    def load_select_distance_setting(self):
+    def load_select_distance_setting(self) -> float:
         self.__settings.beginGroup(self.__GROUP_GRAPH)
-
-        setting = self.__settings.value(
-                self.__KEY_POINT_SELECT_DIST,
-                self.__DEFAULT_POINT_SELECT_DIST
-            )
+        raw = self.__settings.value(self.__KEY_POINT_SELECT_DIST, self.__DEFAULT_POINT_SELECT_DIST)
         self.__settings.endGroup()
-        return setting
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return float(self.__DEFAULT_POINT_SELECT_DIST)
 
 
     # Работа с профилями ТС

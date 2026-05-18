@@ -1,6 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
+from ..exceptions import RoutingPluginError
+from ..logger import Logger
+
 if TYPE_CHECKING:
     from ..services import RestrictionService
     from qgis_route_planner.models import RestrictionModel
@@ -9,8 +12,8 @@ from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject, QDateTime
 from qgis.core import QgsPointXY
 
 from qgis_route_planner.models import RestrictionType
-from ..data.route import RestrictionRecord
-from ..utils import FormMode
+from ..data import RestrictionRecord
+from ..enums import FormMode
 
 
 class RestrictionDialogController(QObject):
@@ -83,8 +86,11 @@ class RestrictionDialogController(QObject):
             restrictions = self.__service.get_all_restrictions()
             restriction_records = [RestrictionRecord.dict_to_record(r) for r in restrictions]
             self.__model.restrictions = restriction_records
+        except RoutingPluginError as e:
+            self.show_error.emit(str(e))
         except Exception as e:
-            self.show_error.emit(f"Ошибка загрузки ограничений: {e}")
+            Logger.error(e)
+            self.show_error.emit("Не удалось загрузить ограничения")
 
     def on_restriction_selected(self, restriction_id: int | None):
         """ Обработчик выбора ограничения в списке """

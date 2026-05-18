@@ -12,8 +12,8 @@ from qgis.PyQt.QtGui import QIcon
 
 from .message_box_mixin import MessageBoxMixin
 from qgis_route_planner.models import RestrictionType
-from ..data.route import RestrictionRecord
-from ..utils import FormMode
+from ..data import RestrictionRecord
+from ..enums import FormMode
 
 
 class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):

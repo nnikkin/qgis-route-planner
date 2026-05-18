@@ -4,8 +4,7 @@ from qgis.core import QgsPointXY
 
 from qgis.PyQt.QtWidgets import QMessageBox
 
-from ..data.route import SelectedPointCollection
-from ..data.vehicle import VehicleProfile
+from ..data import SelectedPointCollection, VehicleProfile
 from ..exceptions import WeatherServiceError, NodeNotFoundError
 from ..repositories import RoadGraphRepository
 from .weather_service import WeatherService
@@ -107,6 +106,7 @@ class RoutingService:
             profile: VehicleProfile,
             waypoints_ids: list[int] = None,
             restriction_nodes: list[int] = None,
+            route_points: list = None
     ) -> list[list[dict]] | None:
 
         if not self.__graph_repo:
@@ -139,8 +139,8 @@ class RoutingService:
         try:
             routes = self.__graph_repo.get_routes(
                 start_node_id, end_node_id, profile,
-                waypoints_ids, restriction_nodes,
-                route_speed_kmh=route_speed_kmh,
+                waypoints_ids, route_points, restriction_nodes,
+                route_speed_kmh=route_speed_kmh
             )
 
             if routes:

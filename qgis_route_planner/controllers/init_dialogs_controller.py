@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qgis_route_planner.models import DbConfigModel, LayerConfigModel, ColumnsConfigModel
     from ..services import SpatialDataService
-    from ..utils import ColumnRole, GeometryType, LayerRole
+    from ..enums import ColumnRole, GeometryType, LayerRole
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 

@@ -1,5 +1,5 @@
 from ..repositories import DbConnection
-from ..data.vehicle import VehicleProfile
+from ..data import VehicleProfile
 
 
 class VehicleProfileRepository:

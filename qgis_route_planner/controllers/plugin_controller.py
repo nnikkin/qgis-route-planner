@@ -6,6 +6,7 @@ from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.core import QgsTask, QgsApplication
 
+from ..exceptions import RoutingPluginError
 from ..repositories import (
     RoadGraphRepository,
     LayerRepository,
@@ -34,7 +35,7 @@ from .init_dialogs_controller import InitDialogsController
 from .main_window_controller import MainWindowController
 from .settings_dialog_controller import SettingsDialogController
 from .restriction_dialog_controller import RestrictionDialogController
-from ..utils.logger import Logger
+from qgis_route_planner.logger import Logger
 
 from ..views import (
     PluginMainWindow,
@@ -219,12 +220,11 @@ class PluginController(BaseController):
                 self.__init_repositories()
                 self.__init_services()
                 self.__init_dialogs_controller.set_service(self.__spatial_data_service)
+        except RoutingPluginError as e:
+            QMessageBox.critical(None, "Ошибка", str(e), QMessageBox.Ok)
         except Exception as e:
-            QMessageBox.critical(None, "Ошибка",
-                f"Не удалось завершить инициализацию плагина:\n{e}", QMessageBox.Ok)
-            Logger.error(f"Не удалось завершить инициализацию плагина:\n{e}")
-            if self.__is_reconnecting:
-                self.__reconnect_cancelled()
+            Logger.error(e)
+            QMessageBox.critical(None, "Ошибка", "Не удалось подключиться к базе данных", QMessageBox.Ok)
 
     def __db_con_created(self):
         try:

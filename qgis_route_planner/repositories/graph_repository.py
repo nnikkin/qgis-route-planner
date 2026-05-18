@@ -5,8 +5,8 @@ from psycopg import sql
 
 from qgis_route_planner.models import Layer
 from ..exceptions import NodeNotFoundError
-from ..utils import ColumnRole, GeometryType, LayerRole
-from ..data.vehicle import VehicleProfile
+from ..enums import ColumnRole, GeometryType, LayerRole
+from ..data import VehicleProfile
 from ..repositories import DbConnection, LayerRepository
 
 
@@ -896,9 +896,12 @@ class RoadGraphRepository:
 
             self.__db.execute_nonquery(query)
 
-    def __pgr_ksp(self, start_id, end_id, k, profile, restriction_nodes=None, route_speed_kmh=None):
+    def __pgr_ksp(self, start_id, end_id, k, profile, route_points=None, restriction_nodes=None, route_speed_kmh=None):
         """ Используемый алгоритм поиска n маршрутов. Не учитывает turn_restrictions! """
-        sql_inner_query = self.__routing_edges_sql(profile, restriction_nodes, route_speed_kmh)
+        sql_edges_query = self.__routing_edges_sql(profile, restriction_nodes, route_speed_kmh)
+        sql_points_query = self.__routing_points_sql(route_points, profile, restriction_nodes, route_speed_kmh)
+
+        # one to one: pgr_withPointsKSP( Edges SQL , Points SQL , start vid , end vid , K , driving_side , [ options ])
         query = f"""
             SELECT
                 r.path_id,
@@ -912,7 +915,8 @@ class RoadGraphRepository:
                 e.length_m,
                 e.name,
                 r.node
-            FROM pgr_ksp(
+            FROM pgr_withPointsKSP(
+                %s::text,
                 %s::text,
                 %s::bigint,
                 %s::bigint,
@@ -922,7 +926,7 @@ class RoadGraphRepository:
             JOIN routing.graph_edges AS e ON r.edge = e.edge_id
             ORDER BY r.path_id, r.seq
             """
-        return self.__db.execute_query(query, sql_inner_query, start_id, end_id, k)
+        return self.__db.execute_query(query, sql_edges_query, sql_points_query, start_id, end_id, k)
 
     def get_routes(
             self,
@@ -930,6 +934,7 @@ class RoadGraphRepository:
             end_id: int,
             profile: VehicleProfile,
             waypoint_ids: list[int] = None,
+            route_points: list = None,
             restriction_nodes: list[int] = None,
             route_speed_kmh: float | None = None,
             routes_n: int = 3) -> list[list[dict]] | None:
@@ -941,7 +946,7 @@ class RoadGraphRepository:
             raise NodeNotFoundError(f"Конечный узел {end_id} не найден в БД!")
 
         if not waypoint_ids:
-            rows = self.__pgr_ksp(start_id, end_id, routes_n, profile, restriction_nodes, route_speed_kmh)
+            rows = self.__pgr_ksp(start_id, end_id, routes_n, profile, route_points, restriction_nodes, route_speed_kmh)
             routes = {}
             for row in rows:
                 path_id = row[0]
@@ -964,7 +969,7 @@ class RoadGraphRepository:
             for i in range(len(route_point_ids) - 1):
                 seg_start, seg_end = route_point_ids[i], route_point_ids[i + 1]
                 seg_rows = self.__pgr_ksp(
-                    seg_start, seg_end, routes_n, profile, restriction_nodes, route_speed_kmh
+                    seg_start, seg_end, routes_n, profile, route_points, restriction_nodes, route_speed_kmh
                 )
 
                 # Группируем ребра по path_id внутри текущего сегмента
@@ -1076,6 +1081,29 @@ class RoadGraphRepository:
         {"WHERE hgv IS NOT FALSE" if profile.type.lower() == 'truck' else "WHERE 1=1"}
         {restriction_condition}
     """
+
+    def __routing_points_sql(self, route_points, profile, restriction_nodes, route_speed_kmh):
+        point_values = []
+        pids = {}
+        for index, point in enumerate(route_points, start=1):
+            if point.edge_id is None or point.fraction is None:
+                return self.get_routes(
+                    route_points[0].node_id,
+                    route_points[-1].node_id,
+                    profile,
+                    [p.node_id for p in route_points[1:-1]],
+                    restriction_nodes,
+                    route_speed_kmh,
+                    routes_n=1,
+                )
+            pid = index
+            pids[point.id] = pid
+            fraction = min(max(float(point.fraction), 0.000001), 0.999999)
+            point_values.append(f"({pid}, {int(point.edge_id)}, {fraction}, 'b'::text)")
+        return f"""
+            SELECT pid, edge_id, fraction, side 
+                FROM (VALUES {', '.join(point_values)}) AS points(pid, edge_id, fraction, side)
+        """
 
     def __check_point(self, point_id: int) -> bool:
         result = self.__db.execute_query(
