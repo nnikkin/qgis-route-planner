@@ -43,16 +43,16 @@ class SettingsDialog(QDialog):
 
         # Сигналы от view к контроллеру
         self.editDbConButton.clicked.connect(self.__on_change_db_clicked)
+
         self.createProfileButton.clicked.connect(self.__on_create_profile_clicked)
         self.editProfileButton.clicked.connect(self.__controller.start_profile_edit)
-
         self.saveProfileButton.clicked.connect(self.__on_save_profile_clicked)
         self.deleteProfileButton.clicked.connect(self.__controller.request_delete_profile)
         self.cancelProfileEditButton.clicked.connect(self.__controller.cancel_profile_edit)
         self.setActiveProfileButton.clicked.connect(self.__controller.set_active_profile)
-
         self.profilesListWidget.itemSelectionChanged.connect(self.__on_profile_selection_changed)
         self.profilesListWidget.itemDoubleClicked.connect(self.__on_profile_double_clicked)
+
         self.rebuildGraphButton.clicked.connect(self.__on_rebuild_graph_clicked)
 
     def setupUi(self):
@@ -423,7 +423,7 @@ class SettingsDialog(QDialog):
     @pyqtSlot(FormMode)
     def __on_editing_mode_changed(self, mode: FormMode):
         """Обновить состояние формы редактирования"""
-        is_editing = mode == FormMode.EDIT
+        is_editing = mode == FormMode.EDIT or mode == FormMode.CREATE
         self.profileNameEdit.setEnabled(is_editing)
         self.vehicleTypeComboBox.setEnabled(is_editing)
         self.profileHeightSpinBox.setEnabled(is_editing)
@@ -568,7 +568,7 @@ class SettingsDialog(QDialog):
 
     def closeEvent(self, event):
         """Обработчик закрытия окна"""
-        if self.__model.is_editing_enabled:
+        if self.__model.editing_mode == FormMode.EDIT or self.__model.editing_mode == FormMode.CREATE:
             close_question = QMessageBox.question(
                 self,
                 "Внимание",

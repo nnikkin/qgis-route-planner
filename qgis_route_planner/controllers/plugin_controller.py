@@ -9,11 +9,22 @@ from ..services import SpatialDataService, RoutingService, SettingsService
 from ..views import PluginMainWindow, ConnectionConfigDialog, SettingsDialog, LayersSelectDialog, LayerColumnsDialog
 from ..controllers import InitDialogsController, MainWindowController, SettingsWindowController
 
+from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.PyQt.QtWidgets import QMessageBox
+from qgis.core import QgsTask, QgsApplication
 
-class PluginController:
+class PluginController(QObject):
     """Контроллер плагина"""
+
+    plugin_initialized = pyqtSignal()
+    crit_plugin_error = pyqtSignal()
+
     def __init__(self):
+        super().__init__(parent=None)
+
+        self.__build_task = None
+        self.__rebuild_task = None
+
         self.__db_config_model: DbConfigModel = DbConfigModel()
         self.__layers_config_model: LayerConfigModel = LayerConfigModel()
         self.__cols_config_model: ColumnsConfigModel = ColumnsConfigModel()
@@ -188,34 +199,91 @@ class PluginController:
         self.__initialization_finished()
 
     def __initialization_finished(self):
+        # копируем на всякий случай, чтобы не изменились
+        selected_layers = list(self.__selected_layers)
+        column_mapping = dict(self.__column_mapping)
+
         try:
-            self.first_start = False
-            self.__spatial_data_service.run_init_database(self.__selected_layers, self.__column_mapping)
+            def run_in_background(task: QgsTask):
+                task.setProgress(0)
+                self.__spatial_data_service.run_init_database(selected_layers, column_mapping)
+                task.setProgress(100)
+                return True
+
+            def on_finished(exception, result=None):
+                if exception:
+                    QMessageBox.critical(
+                        None,
+                        "Ошибка",
+                        f"Не удалось инициализировать БД:\n{exception}",
+                        QMessageBox.Ok,
+                    )
+                    return
+
+                self.__on_topology_build_finished()
+
+            self.__build_task = QgsTask.fromFunction(
+                "Инициализация базы данных",
+                run_in_background,
+                on_finished=on_finished,
+            )
+            QgsApplication.taskManager().addTask(self.__build_task)
         except Exception as e:
             QMessageBox.critical(
                 None,
                 "Ошибка",
-                f"Не удалось завершить инициализацию плагина:\n{e}",
+                f"Не удалось построить граф:\n{e}\nПлагин завершает работу.",
                 QMessageBox.Ok
             )
+            self.crit_plugin_error.emit()
 
-        self.__main_window.show()
-        self.__main_window_controller.initialize_map()
+
+    def __on_topology_build_finished(self):
+        self.plugin_initialized.emit()
+        self.__initialize_map()
+
+    def __on_topology_rebuild_finished(self):
+        self.__initialize_map()
+        self.__settings_dialog.close()
 
     def __initialization_cancelled(self):
         if self.__main_window_controller:
             self.__main_window.close()
 
-        self.first_start = True
         self.__init_dialogs_controller = None
 
+    def __initialize_map(self):
+        self.__main_window_controller.initialize_map()
+        self.__main_window.show()
+
     def __on_graph_rebuild_requested(self):
+        self.__main_window.close()
+
         try:
-            self.__main_window.close()
-            self.__graph_repo.create_topology()
-            self.__main_window.show()
-            self.__main_window_controller.initialize_map()
-            self.__settings_dialog.close()
+            def run_in_background(task: QgsTask):
+                task.setProgress(0)
+                self.__graph_repo.create_topology()
+                task.setProgress(100)
+                return True
+
+            def on_finished(exception, result=None):
+                if exception:
+                    QMessageBox.critical(
+                        None,
+                        "Ошибка",
+                        f"Не удалось инициализировать БД:\n{exception}",
+                        QMessageBox.Ok,
+                    )
+                    return
+
+                self.__on_topology_rebuild_finished()
+
+            self.__rebuild_task = QgsTask.fromFunction(
+                "Пересоздание графа",
+                run_in_background,
+                on_finished=on_finished,
+            )
+            QgsApplication.taskManager().addTask(self.__rebuild_task)
         except Exception as e:
             QMessageBox.critical(None, "Ошибка", f"Не удалось перестроить граф:\n{e}", QMessageBox.Ok)
 
@@ -227,17 +295,6 @@ class PluginController:
         self.__old_cols_config_model = self.__cols_config_model
 
         try:
-            self.__db_connection = None
-            self.__db_config_model = DbConfigModel()
-            self.__layers_config_model = LayerConfigModel()
-            self.__cols_config_model = ColumnsConfigModel()
-            self.__init_dialogs_controller: InitDialogsController = InitDialogsController(
-                db_config_model=self.__db_config_model,
-                layer_config_model=self.__layers_config_model,
-                columns_config_model=self.__cols_config_model
-            )
-
-            self.__connect_signals()
             self.__db_config_dialog.open()
         except Exception as e:
             QMessageBox.critical(
@@ -253,20 +310,11 @@ class PluginController:
         self.__db_config_model = self.__old_db_config_model
         self.__layers_config_model = self.__old_layers_config_model
         self.__cols_config_model = self.__old_cols_config_model
-        self.__init_dialogs_controller: InitDialogsController = InitDialogsController(
-            db_config_model=self.__db_config_model,
-            layer_config_model=self.__layers_config_model,
-            columns_config_model=self.__cols_config_model
-        )
 
         self.__old_db_connection = None
         self.__old_db_config_model = None
         self.__old_layers_config_model = None
         self.__old_cols_config_model = None
-
-        self.__connect_signals()
-
-        self.__init_everything()
 
     def unload(self):
         if self.__main_window_controller is not None:

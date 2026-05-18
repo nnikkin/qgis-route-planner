@@ -10,7 +10,6 @@ from qgis_route_planner.controllers import PluginController
 
 #TODO: реализовать логгер и исключения
 class QgisRoutePlanner:
-    """QGIS Plugin Implementation."""
 
     def __init__(self, iface):
         self.iface = iface
@@ -20,6 +19,8 @@ class QgisRoutePlanner:
         self.first_start = True
 
         self.__controller: PluginController = PluginController()
+        self.__controller.plugin_initialized.connect(self.__on_initialized)
+        self.__controller.crit_plugin_error.connect(self.unload)
 
         from qgis.PyQt.QtCore import QLibraryInfo
         locale = QSettings().value("locale/userLocale", "ru")
@@ -90,7 +91,10 @@ class QgisRoutePlanner:
 
     def run(self):
         if self.first_start:
-            self.__controller.first_start_initialize()
             self.first_start = False
+            self.__controller.first_start_initialize()
         else:
             self.__controller.open_main_window()
+
+    def __on_initialized(self):
+        self.first_start = False

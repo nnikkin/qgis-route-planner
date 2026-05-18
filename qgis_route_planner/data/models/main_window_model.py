@@ -18,82 +18,82 @@ class MainWindowModel(QObject):
 
     def __init__(self):
         super().__init__()
-        self._points: list[RoutePoint] = []
-        self._routes: list[list[dict]] = []
-        self._active_route_index: int = 0
-        self._active_profile: VehicleProfile | None = None
-        self._status_message: str = ""
-        self._active_tab: int = 0
-        self._clear_button_enabled: bool = False
+        self.__points: list[RoutePoint] = []
+        self.__routes: list[list[dict]] = []
+        self.__active_route_index: int = 0
+        self.__active_profile: VehicleProfile | None = None
+        self.__status_message: str = ""
+        self.__active_tab: int = 0
+        self.__clear_button_enabled: bool = False
 
     @property
     def points(self) -> list[RoutePoint]:
-        return self._points
+        return self.__points
 
     @points.setter
     def points(self, value: list[RoutePoint]):
-        self._points = value
-        self.points_changed.emit(self._points)
-        self.clear_button_enabled = bool(self._points)
+        self.__points = value
+        self.points_changed.emit(self.__points)
+        self.clear_button_enabled = bool(self.__points)
 
     @property
     def routes(self) -> list[list[dict]]:
-        return self._routes
+        return self.__routes
 
     @routes.setter
     def routes(self, value: list[list[dict]]):
-        self._routes = value
-        self.routes_changed.emit(self._routes)
+        self.__routes = value
+        self.routes_changed.emit(self.__routes)
 
     @property
     def active_route_index(self) -> int:
-        return self._active_route_index
+        return self.__active_route_index
 
     @active_route_index.setter
     def active_route_index(self, value: int):
-        self._active_route_index = value
+        self.__active_route_index = value
         self.active_route_changed.emit(value)
 
     @property
     def active_profile(self) -> VehicleProfile | None:
-        return self._active_profile
+        return self.__active_profile
 
     @active_profile.setter
     def active_profile(self, value: VehicleProfile | None):
-        self._active_profile = value
+        self.__active_profile = value
         self.active_profile_changed.emit(value)
         if value:
             self.status_message = f"Активный профиль: {value.name}"
 
     @property
     def status_message(self) -> str:
-        return self._status_message
+        return self.__status_message
 
     @status_message.setter
     def status_message(self, value: str):
-        self._status_message = value
+        self.__status_message = value
         self.status_message_changed.emit(value)
 
     @property
     def active_tab(self) -> int:
-        return self._active_tab
+        return self.__active_tab
 
     @active_tab.setter
     def active_tab(self, value: int):
-        self._active_tab = value
+        self.__active_tab = value
         self.active_tab_changed.emit(value)
 
     @property
     def clear_button_enabled(self) -> bool:
-        return self._clear_button_enabled
+        return self.__clear_button_enabled
 
     @clear_button_enabled.setter
     def clear_button_enabled(self, value: bool):
-        self._clear_button_enabled = value
+        self.__clear_button_enabled = value
         self.clear_button_enabled_changed.emit(value)
 
     def clear(self):
         self.points = []
         self.routes = []
-        self._active_route_index = 0
+        self.__active_route_index = 0
         self.active_tab = 0

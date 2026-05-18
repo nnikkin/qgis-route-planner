@@ -50,7 +50,7 @@ class RestrictionRepository:
             """
         )
 
-    def _next_id(self, table_name: str, column_name: str) -> int:
+    def __next_id(self, table_name: str, column_name: str) -> int:
         rows = self.__db.execute_query(
             f"SELECT COALESCE(MAX({column_name}), 0) + 1 AS next_id FROM {table_name}"
         )
@@ -111,7 +111,7 @@ class RestrictionRepository:
     def add_restriction(self, restriction: RestrictionRecord):
         info_id = None
         if restriction.comment:
-            info_id = self._next_id("routing.restriction_info", "restriction_info_id")
+            info_id = self.__next_id("routing.restriction_info", "restriction_info_id")
             self.__db.execute_nonquery(
                 """
                 INSERT INTO routing.restriction_info (
@@ -122,7 +122,7 @@ class RestrictionRepository:
                 [info_id, restriction.comment],
             )
 
-        restriction_id = self._next_id("routing.restrictions", "restriction_id")
+        restriction_id = self.__next_id("routing.restrictions", "restriction_id")
         self.__db.execute_nonquery(
             """
             INSERT INTO routing.restrictions (
@@ -154,7 +154,7 @@ class RestrictionRepository:
 
         if restriction.comment:
             if info_id is None:
-                info_id = self._next_id("routing.restriction_info", "restriction_info_id")
+                info_id = self.__next_id("routing.restriction_info", "restriction_info_id")
                 self.__db.execute_nonquery(
                     """
                     INSERT INTO routing.restriction_info (

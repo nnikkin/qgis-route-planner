@@ -8,10 +8,10 @@ class DoublyLinkedList:
     def __init__(self):
         self.head = None
         self.tail = None
-        self._length = 0
+        self.__length = 0
 
     def __len__(self):
-        return self._length
+        return self.__length
 
     def __iter__(self):
         current = self.head
@@ -27,11 +27,11 @@ class DoublyLinkedList:
             self.tail.next = new_node
             new_node.prev = self.tail
             self.tail = new_node
-        self._length += 1
+        self.__length += 1
 
     def clear(self):
         self.head = self.tail = None
-        self._length = 0
+        self.__length = 0
 
     def remove_by_id(self, value_id: int):
         current = self.head
@@ -47,7 +47,7 @@ class DoublyLinkedList:
                 else:
                     self.tail = current.prev
 
-                self._length -= 1
+                self.__length -= 1
                 return current.value
             current = current.next
         return None
