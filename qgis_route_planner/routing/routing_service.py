@@ -24,21 +24,13 @@ class RoutingService:
         self.__current_route: SelectedPointCollection = None
         self.__current_weather: dict | None = None
         self.__fallback_season: str = "summer"
-        self.__summer_avg_speed_kmh: float = 60.0
-        self.__winter_avg_speed_kmh: float = 45.0
+        self.__summer_factor = 1.0
+        self.__winter_factor = 0.75
         self.__max_distance: float = 0
 
     def set_weather_settings(self, settings: dict | None):
         settings = settings or {}
         self.__fallback_season = settings.get("fallback_season", self.__fallback_season)
-        self.__summer_avg_speed_kmh = self.__positive_float(
-            settings.get("summer_avg_speed_kmh"),
-            self.__summer_avg_speed_kmh,
-        )
-        self.__winter_avg_speed_kmh = self.__positive_float(
-            settings.get("winter_avg_speed_kmh"),
-            self.__winter_avg_speed_kmh,
-        )
 
     def set_point_select_distance(self, distance: float):
         self.__max_distance = distance
@@ -66,14 +58,17 @@ class RoutingService:
 
         snapped_point = QgsPointXY(float(edge_info["snapped_x"]), float(edge_info["snapped_y"]))
         nearest_node_id = None
+        nearest_node_distance = None
         for node_key in ("source", "target"):
             node_id = edge_info.get(node_key)
             if node_id is None:
                 continue
             coords = self.__graph_provider.get_node_coordinates(node_id)
             if coords:
-                nearest_node_id = int(node_id)
-                break
+                distance = (coords[0] - snapped_point.x()) ** 2 + (coords[1] - snapped_point.y()) ** 2
+                if nearest_node_distance is None or distance < nearest_node_distance:
+                    nearest_node_id = int(node_id)
+                    nearest_node_distance = distance
 
         snap_info = {
             "node_id": nearest_node_id,
@@ -102,28 +97,33 @@ class RoutingService:
             return None
 
         try:
-            self.calculate_weather()
+            weather_data = self.calculate_weather()
         except WeatherServiceError as err:
             raise err
 
         if self.__weather_service and self.__weather_service.has_api_key():
-            route_speed_kmh = self.__weather_service.get_season_speed(
-                self.__summer_avg_speed_kmh,
-                self.__winter_avg_speed_kmh,
-                self.__fallback_season,
+            season_factor = self.__weather_service.get_season_factor(
+                summer_factor=self.__summer_factor,
+                winter_factor=self.__winter_factor,
+                fallback=self.__fallback_season,
+                data=weather_data,
             )
         else:
-            route_speed_kmh = (
-                self.__summer_avg_speed_kmh
+            season_factor = (
+                self.__summer_factor
                 if self.__fallback_season == "summer"
-                else self.__winter_avg_speed_kmh
+                else self.__winter_factor
             )
 
         try:
             routes = self.__graph_provider.get_routes(
-                start_node_id, end_node_id, profile,
-                waypoints_ids, route_points, restriction_nodes,
-                route_speed_kmh=route_speed_kmh
+                profile,
+                start_node_id,
+                end_node_id,
+                waypoints_ids,
+                route_points,
+                restriction_nodes,
+                season_factor=season_factor,
             )
 
             if routes:

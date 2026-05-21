@@ -66,29 +66,44 @@ class WeatherService:
         """ Получить погодные данные для текущих координат сервиса. """
         return self.get_weather_data()
 
-    def get_season_speed(
+    def get_season_factor(
             self,
-            summer_kmh: float,
-            winter_kmh: float,
+            summer_factor: float,
+            winter_factor: float,
             fallback: str = "summer",
+            data: dict | None = None,
     ) -> float:
-        data = self.get_weather_data()
+        data = data if data is not None else self.get_weather_data()
         if data is None:
-            return summer_kmh if fallback == "summer" else winter_kmh
+            return summer_factor if fallback == "summer" else winter_factor
 
         temp = data.get("main", {}).get("temp")
         weather_ids = [w.get("id", 0) for w in data.get("weather", [])]
-        # снег, метель, ледяной дождь
-        is_winter_conditions = ((temp is not None and temp < 2) or
-                                any(200 <= wid < 700 and wid not in range(500, 505) for wid in weather_ids) or
-                                any(600 <= wid < 700 for wid in weather_ids))
 
-        return winter_kmh if is_winter_conditions else summer_kmh
+        is_winter_conditions = (
+                (temp is not None and temp < 2)
+                or any(200 <= wid < 700 and wid not in range(500, 505) for wid in weather_ids)
+                or any(600 <= wid < 700 for wid in weather_ids)
+        )
+
+        return winter_factor if is_winter_conditions else summer_factor
 
     def test_connection(
             self,
+            api_url: str | None = None,
+            api_key: str | None = None,
             lon: float | str = "37.6173",
             lat: float | str = "55.7558",
     ) -> bool:
         """ Проверить доступность сервиса и корректность API-ключа. """
-        return self.get_weather_data(lon=lon, lat=lat) is not None
+        old_api_url = self.__api_url
+        old_api_key = self.__api_key
+        try:
+            if api_url:
+                self.set_api_url(api_url)
+            if api_key is not None:
+                self.set_api_key(api_key)
+            return self.get_weather_data(lon=lon, lat=lat) is not None
+        finally:
+            self.__api_url = old_api_url
+            self.__api_key = old_api_key

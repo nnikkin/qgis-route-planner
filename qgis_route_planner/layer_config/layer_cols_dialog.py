@@ -7,11 +7,12 @@ if TYPE_CHECKING:
     from .cols_config_model import ColumnInfo
 
 from qgis.PyQt import QtCore, QtWidgets
-from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtGui import QBrush, QColor, QIcon
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from qgis_route_planner.presentation import MessageBoxMixin
 from .column_role import ColumnRole
+from .layer_role import LayerRole
 
 
 class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -133,9 +134,22 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.tableWidget.setColumnCount(len(layers))
 
         for col_index, layer in enumerate(layers):
+            required_labels = [
+                role.value
+                for role in self.__model.required_roles_for_layer(layer.role)
+            ]
+            header_text = f"{layer.name}\n{layer.role.value}"
+            if required_labels:
+                header_text += "\n* обязательные поля"
+
+            header_item = QtWidgets.QTableWidgetItem(header_text)
+            header_item.setToolTip(
+                "Обязательные поля:\n" + "\n".join(required_labels)
+                if required_labels else "Для этого слоя обязательных полей нет."
+            )
             self.tableWidget.setHorizontalHeaderItem(
                 col_index,
-                QtWidgets.QTableWidgetItem(layer.name)
+                header_item
             )
 
         for row_index, role in enumerate(ColumnRole):
@@ -145,20 +159,35 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
             )
 
             for col_index, layer in enumerate(layers):
+                item = self.__create_status_item(layer.role, role)
+                self.tableWidget.setItem(row_index, col_index, item)
                 self.tableWidget.setCellWidget(
                     row_index,
                     col_index,
-                    self.__create_cell_combobox(layer.name, role, mappings.get(layer.name, {}).get(role))
+                    self.__create_cell_combobox(layer, role, mappings.get(layer.name, {}).get(role))
                 )
 
         self.tableWidget.blockSignals(False)
 
-    def __create_cell_combobox(self, layer_name: str, role: ColumnRole, selected_column: str | None):
+    def __create_cell_combobox(self, layer, role: ColumnRole, selected_column: str | None):
         combo = QtWidgets.QComboBox()
         combo.setObjectName("colTypeComboBox")
-        combo.addItem("-- Не задано --", None)
+        is_applicable = self.__model.is_role_applicable(layer.role, role)
+        is_required = self.__model.is_role_required(layer.role, role)
 
-        for column in self.__model.available_columns.get(layer_name, []):
+        if not is_applicable:
+            combo.addItem("Не используется для этого типа слоя", None)
+            combo.setEnabled(False)
+            combo.setToolTip("Это поле не применяется для роли слоя.")
+            return combo
+
+        combo.addItem("-- Обязательное поле --" if is_required else "-- Не задано --", None)
+        combo.setToolTip(
+            "Обязательное поле для этой роли слоя."
+            if is_required else "Необязательное поле для этой роли слоя."
+        )
+
+        for column in self.__model.available_columns.get(layer.name, []):
             label = self.__column_label(column)
             combo.addItem(label, column.name)
 
@@ -166,12 +195,30 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
                 combo.setCurrentIndex(combo.count() - 1)
 
         combo.currentIndexChanged.connect(
-            lambda _, c=combo, table=layer_name, column_role=role:
+            lambda _, c=combo, table=layer.name, column_role=role:
                 self.__controller.change_column_info(table, c.currentData(), column_role)
         )
+
+        if is_required and not selected_column:
+            combo.setStyleSheet("QComboBox { background-color: #fff3cd; }")
         return combo
 
     def __column_label(self, column: ColumnInfo) -> str:
         if column.data_type:
             return f"{column.name} ({column.data_type})"
         return column.name
+
+    def __create_status_item(self, layer_role: LayerRole, column_role: ColumnRole):
+        item = QtWidgets.QTableWidgetItem()
+        item.setFlags(QtCore.Qt.ItemFlag.NoItemFlags)
+
+        if not self.__model.is_role_applicable(layer_role, column_role):
+            item.setBackground(QBrush(QColor("#eeeeee")))
+            item.setToolTip("Не используется для этой роли слоя.")
+        elif self.__model.is_role_required(layer_role, column_role):
+            item.setBackground(QBrush(QColor("#fff3cd")))
+            item.setToolTip("Обязательное поле.")
+        else:
+            item.setToolTip("Необязательное поле.")
+
+        return item

@@ -117,6 +117,7 @@ class PluginCoordinator(QObject):
         self.__old_restriction_model: RestrictionModel | None = None
         self.__is_reconnecting = False
         self.__reconnect_snapshot: dict[str, object] | None = None
+        self.__saved_schema_to_select: str | None = None
 
         self.__connect()
 
@@ -136,8 +137,15 @@ class PluginCoordinator(QObject):
                 self.__db_config_model.database = saved_params.database
                 self.__db_config_model.username = saved_params.username
                 self.__db_config_model.password = saved_params.password
+                self.__db_config_model.schema = saved_params.schema
+                self.__saved_schema_to_select = saved_params.schema
         except Exception as e:
-            QMessageBox.critical(f"Не удалось загрузить сохранённые параметры подключения: {e}")
+            QMessageBox.critical(
+                None,
+                "Ошибка",
+                f"Не удалось загрузить сохранённые параметры подключения: {e}",
+                QMessageBox.Ok
+            )
             Logger.warning(f"Не удалось загрузить сохранённые параметры подключения: {e}")
 
     def open_main_window(self):
@@ -202,6 +210,14 @@ class PluginCoordinator(QObject):
         )
         self.__settings_controller.select_distance_setting_saved.connect(
             self.__main_window_controller.set_point_select_distance
+        )
+        self.__settings_controller.basemap_settings_saved.connect(
+            lambda _settings: self.__initialize_map()
+        )
+
+        graph_settings = self.__settings_service.load_graph_settings()
+        self.__main_window_controller.set_point_select_distance(
+            float(graph_settings.get("point_select_distance", 10.0))
         )
 
         self.__restriction_controller = RestrictionDialogController(
@@ -272,6 +288,8 @@ class PluginCoordinator(QObject):
             )
             schemas = self.__db_connection.get_schemas()
             self.__db_config_model.schemas = schemas
+            if self.__saved_schema_to_select in schemas:
+                self.__db_config_model.schema = self.__saved_schema_to_select
 
             if len(schemas) == 0:
                 QMessageBox.warning(self.__layer_select_dialog, "Внимание",
@@ -284,6 +302,7 @@ class PluginCoordinator(QObject):
     def __db_con_created(self):
         try:
             self.__db_connection.schema = self.__db_config_model.schema
+            self.__settings_service.save_db_params(self.__db_connection)
 
             if self.__main_window and self.__settings_dialog:
                 self.__main_window.close()
@@ -342,6 +361,7 @@ class PluginCoordinator(QObject):
 
     def __apply_weather_settings(self, settings: dict):
         if self.__weather_service:
+            self.__weather_service.set_api_url(settings.get("api_url", ""))
             self.__weather_service.set_api_key(settings.get("api_key", ""))
 
         if self.__routing_service:
@@ -412,6 +432,8 @@ class PluginCoordinator(QObject):
         Logger.info("Инициализация плагина завершена!")
 
     def __on_topology_rebuild_finished(self):
+        if self.__main_window_controller:
+            self.__main_window_controller.clear_route_state()
         self.__initialize_map()
         self.__settings_dialog.close()
         Logger.info("Граф перестроен!")

@@ -42,8 +42,6 @@ class MainWindowModel(QObject):
     @points.setter
     def points(self, value: list[RoutePointDto]):
         self.__points = value
-        print(self.__points)
-        print()
         self.points_changed.emit(self.__points)
 
     @property

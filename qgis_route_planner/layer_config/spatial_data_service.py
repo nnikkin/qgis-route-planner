@@ -55,25 +55,34 @@ class SpatialDataService:
             ) from e
 
     def get_tables(self) -> list[str]:
-        """ Получение списка таблиц по схеме """
+        """ Получение списка пространственных таблиц по схеме """
         try:
-            tuple_list = self.__layer_repo.get_tables()
+            tuple_list = self.__layer_repo.get_spatial_table_names()
             return [item[0] for item in tuple_list]
         except psycopgError.DatabaseError as e:
             raise DbConnectionError(
-                "Не удалось получить список таблиц",
+                "Не удалось получить список пространственных таблиц",
                 operation="get_tables"
             ) from e
 
-    def get_table_columns(self, table_name: str) -> list[str]:
+    def get_table_columns(self, table_name: str) -> list:
         """ Получение списка столбцов из таблицы """
         try:
-            tuple_list = self.__layer_repo.get_table_columns(table_name)
-            return [item[0] for item in tuple_list]
+            return self.__layer_repo.get_table_columns(table_name)
         except psycopgError.DatabaseError as e:
             raise DbConnectionError(
                 f"Не удалось получить информацию по таблице {table_name}",
                 operation="get_table_columns"
+            ) from e
+
+    def validate_column_mapping(self, layers: list[Layer], column_mapping=None) -> list[str]:
+        """ Проверить, что сопоставленные роли колонок подходят выбранным слоям """
+        try:
+            return self.__layer_repo.validate_column_mapping(layers, column_mapping)
+        except psycopgError.DatabaseError as e:
+            raise DbConnectionError(
+                "Не удалось проверить сопоставление колонок выбранных слоёв",
+                operation="validate_column_mapping"
             ) from e
 
     def get_first_point_source_coordinates(
@@ -100,4 +109,7 @@ class SpatialDataService:
         except (DataImportError, TopologyBuildError):
             raise
         except psycopgError.Error as e:
-            raise TopologyBuildError(f"Не удалось построить топологию графа:\n{e}") from e
+            raise TopologyBuildError(
+                "Не удалось построить граф. Проверьте сопоставление колонок, типы данных "
+                "и наличие расширений PostGIS/hstore в базе данных."
+            ) from e

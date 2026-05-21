@@ -6,11 +6,17 @@ class RestrictionType(Enum):
     TEMPORARY = 3
 
     @classmethod
-    def get_as_str(self, restriction_type: int) -> str:
-        match restriction_type:
-            case RestrictionType.SIMPLE.value:
-                return "Простое"
-            case RestrictionType.DIMENSION.value:
-                return "По габаритам ТС"
-            case RestrictionType.TEMPORARY:
-                return "По времени"
+    def get_as_str(cls, restriction_type) -> str:
+        if isinstance(restriction_type, cls):
+            restriction_type = restriction_type.value
+        try:
+            restriction_type = int(restriction_type)
+        except (TypeError, ValueError):
+            return "Неизвестно"
+
+        names = {
+            cls.SIMPLE.value: "Простое",
+            cls.DIMENSION.value: "По габаритам ТС",
+            cls.TEMPORARY.value: "По времени",
+        }
+        return names.get(restriction_type, "Неизвестно")

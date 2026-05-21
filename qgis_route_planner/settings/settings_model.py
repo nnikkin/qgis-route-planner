@@ -22,6 +22,7 @@ class SettingsModel(QObject):
     weather_settings_changed = pyqtSignal(dict)
 
     point_select_distance_changed = pyqtSignal(float)
+    basemap_settings_changed = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
@@ -34,7 +35,8 @@ class SettingsModel(QObject):
         self.__selected_profile_data: ProfileDto = None
         self.__editing_mode: FormMode = FormMode.EMPTY
         self.__weather_settings: dict = {}
-        self.__point_select_distance: float = 0.1
+        self.__point_select_distance: float = 5
+        self.__basemap_settings: dict = {}
 
     @property
     def db_params(self):
@@ -107,6 +109,15 @@ class SettingsModel(QObject):
     def point_select_distance(self, value: float):
         self.__point_select_distance = value
         self.point_select_distance_changed.emit(value)
+
+    @property
+    def basemap_settings(self) -> dict:
+        return self.__basemap_settings
+
+    @basemap_settings.setter
+    def basemap_settings(self, value: dict):
+        self.__basemap_settings = value or {}
+        self.basemap_settings_changed.emit(self.__basemap_settings)
 
     def is_last_profile(self) -> bool:
         return len(self.__profiles) == 1

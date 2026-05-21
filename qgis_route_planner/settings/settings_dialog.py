@@ -48,6 +48,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__model.selected_profile_data_changed.connect(self.__on_current_profile_data_changed)
         self.__model.weather_settings_changed.connect(self.__on_weather_settings_changed)
         self.__model.point_select_distance_changed.connect(self.__on_point_select_distance_changed)
+        self.__model.basemap_settings_changed.connect(self.__on_basemap_settings_changed)
 
         # Сигналы от view к контроллеру
         self.__editDbConButton.clicked.connect(self.__on_change_db_clicked)
@@ -330,9 +331,22 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__distanceEdit.setSuffix(" м")
         self.__graphSettingsLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__distanceEdit)
 
+        self.__basemapEnabledCheckBox = QtWidgets.QCheckBox()
+        self.__basemapEnabledCheckBox.setObjectName("basemapEnabledCheckBox")
+        self.__graphSettingsLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__basemapEnabledCheckBox)
+
+        self.__basemapUrlLabel = QtWidgets.QLabel()
+        self.__basemapUrlLabel.setObjectName("basemapUrlLabel")
+        self.__graphSettingsLayout.setWidget(6, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__basemapUrlLabel)
+
+        self.__basemapUrlEdit = QtWidgets.QLineEdit()
+        self.__basemapUrlEdit.setObjectName("basemapUrlEdit")
+        self.__basemapUrlEdit.setClearButtonEnabled(True)
+        self.__graphSettingsLayout.setWidget(6, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__basemapUrlEdit)
+
         self.__saveGraphSettingsButton = QtWidgets.QPushButton()
         self.__saveGraphSettingsButton.setObjectName("saveGraphSettingsButton")
-        self.__graphSettingsLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__saveGraphSettingsButton)
+        self.__graphSettingsLayout.setWidget(7, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__saveGraphSettingsButton)
 
         self.__verticalLayout_3.addLayout(self.__graphSettingsLayout)
 
@@ -374,28 +388,6 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__fallbackSeasonComboBox.addItem("", "winter")
         self.__tabWeatherLayout.setWidget(2, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__fallbackSeasonComboBox)
 
-        self.__summerSpeedLabel = QtWidgets.QLabel(self.__tabWeather)
-        self.__summerSpeedLabel.setObjectName("summerSpeedLabel")
-        self.__tabWeatherLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__summerSpeedLabel)
-
-        self.__summerSpeedSpinBox = QtWidgets.QDoubleSpinBox(self.__tabWeather)
-        self.__summerSpeedSpinBox.setObjectName("summerSpeedSpinBox")
-        self.__summerSpeedSpinBox.setRange(1.0, 200.0)
-        self.__summerSpeedSpinBox.setDecimals(1)
-        self.__summerSpeedSpinBox.setSingleStep(5.0)
-        self.__tabWeatherLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__summerSpeedSpinBox)
-
-        self.__winterSpeedLabel = QtWidgets.QLabel(self.__tabWeather)
-        self.__winterSpeedLabel.setObjectName("winterSpeedLabel")
-        self.__tabWeatherLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.LabelRole, self.__winterSpeedLabel)
-
-        self.__winterSpeedSpinBox = QtWidgets.QDoubleSpinBox(self.__tabWeather)
-        self.__winterSpeedSpinBox.setObjectName("winterSpeedSpinBox")
-        self.__winterSpeedSpinBox.setRange(1.0, 200.0)
-        self.__winterSpeedSpinBox.setDecimals(1)
-        self.__winterSpeedSpinBox.setSingleStep(5.0)
-        self.__tabWeatherLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__winterSpeedSpinBox)
-
         self.__weatherButtonsLayout = QtWidgets.QHBoxLayout()
         self.__weatherButtonsLayout.setObjectName("weatherButtonsLayout")
 
@@ -407,7 +399,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__saveWeatherButton.setObjectName("saveWeatherButton")
         self.__weatherButtonsLayout.addWidget(self.__saveWeatherButton)
 
-        self.__tabWeatherLayout.setLayout(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__weatherButtonsLayout)
+        self.__tabWeatherLayout.setLayout(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__weatherButtonsLayout)
         self.__tabWidget.addTab(self.__tabWeather, "")
 
         self.__gridLayout.addWidget(self.__tabWidget, 0, 0, 1, 1)
@@ -478,15 +470,14 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__fallbackSeasonLabel.setText(_translate("Dialog", "Сезон (оффлайн):"))
         self.__fallbackSeasonComboBox.setItemText(0, _translate("Dialog", "Летний"))
         self.__fallbackSeasonComboBox.setItemText(1, _translate("Dialog", "Зимний"))
-        self.__summerSpeedLabel.setText(_translate("Dialog", "Средняя скорость летом:"))
-        self.__summerSpeedSpinBox.setSuffix(_translate("Dialog", " км/ч"))
-        self.__winterSpeedLabel.setText(_translate("Dialog", "Средняя скорость зимой:"))
-        self.__winterSpeedSpinBox.setSuffix(_translate("Dialog", " км/ч"))
         self.__checkServiceConButton.setText(_translate("Dialog", "Проверить подключение"))
         self.__saveWeatherButton.setText(_translate("Dialog", "Сохранить"))
         self.__tabWidget.setTabText(self.__tabWidget.indexOf(self.__tabWeather), _translate("Dialog", "Сервис погоды"))
         self.__saveGraphSettingsButton.setText(_translate("Dialog", "Сохранить"))
         self.__distanceLabel.setText(_translate("Dialog", "Расстояние захвата точки:"))
+        self.__basemapEnabledCheckBox.setText(_translate("Dialog", "Подгружать подложку"))
+        self.__basemapUrlLabel.setText(_translate("Dialog", "URL подложки:"))
+        self.__basemapUrlEdit.setPlaceholderText(_translate("Dialog", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"))
 
     # Слоты для сигналов от контроллера
     def __open_dialog(self, page_index: int):
@@ -497,6 +488,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__on_profiles_changed(self.__model.profiles)
         self.__on_weather_settings_changed(self.__model.weather_settings)
         self.__on_point_select_distance_changed(self.__model.point_select_distance)
+        self.__on_basemap_settings_changed(self.__model.basemap_settings)
 
         self.show()
 
@@ -592,12 +584,14 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         season_index = self.__fallbackSeasonComboBox.findData(season)
         self.__fallbackSeasonComboBox.setCurrentIndex(season_index if season_index >= 0 else 0)
 
-        self.__summerSpeedSpinBox.setValue(float(settings.get("summer_avg_speed_kmh", 60.0)))
-        self.__winterSpeedSpinBox.setValue(float(settings.get("winter_avg_speed_kmh", 45.0)))
-
     @pyqtSlot(float)
     def __on_point_select_distance_changed(self, value: float):
         self.__distanceEdit.setValue(value)
+
+    @pyqtSlot(dict)
+    def __on_basemap_settings_changed(self, settings: dict):
+        self.__basemapEnabledCheckBox.setChecked(bool(settings.get("basemap_enabled", False)))
+        self.__basemapUrlEdit.setText(settings.get("basemap_url", ""))
 
     # Вспомогательные методы
     def __update_profiles_list(self, profiles_list: list[ProfileDto], active_id: int | None):
@@ -657,7 +651,9 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def __on_save_graph_settings_clicked(self):
         self.__controller.save_graph_settings(
-            self.__distanceEdit.value()
+            self.__distanceEdit.value(),
+            self.__basemapEnabledCheckBox.isChecked(),
+            self.__basemapUrlEdit.text(),
         )
 
     def __on_check_weather_clicked(self):
@@ -670,10 +666,9 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __on_save_weather_clicked(self):
         """ Обработчик сохранения погодных настроек """
         self.__controller.save_weather_settings(
+            self.__urlLineEdit.text(),
             self.__keyLineEdit.text(),
             self.__fallbackSeasonComboBox.currentData(),
-            self.__summerSpeedSpinBox.value(),
-            self.__winterSpeedSpinBox.value(),
         )
 
     def __on_save_profile_clicked(self):

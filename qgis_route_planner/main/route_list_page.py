@@ -42,6 +42,7 @@ class RouteListPage(QWidget):
         __icon = QIcon()
         __icon.addPixmap(QPixmap(f":/route_list_icons/save_icon"))
         save_btn.setIcon(__icon)
+        save_btn.setText("Сохранить маршрут в HTML")
         save_btn.setObjectName(f"save_btn_{self.__route_id}")
         save_btn.clicked.connect(lambda checked=False, rid=self.__route_id: self.route_save_requested.emit(rid))
         buttons_layout.addWidget(save_btn)
@@ -54,7 +55,7 @@ class RouteListPage(QWidget):
         info_form.setContentsMargins(5, 5, 5, 5)
 
         time_label = QLabel("Время в пути:")
-        time_value = QLabel(f"{self.__info['time_minutes']:.0f} мин")
+        time_value = QLabel(self.__format_time(self.__info.get("time_minutes", 0)))
         dist_label = QLabel("Длина маршрута:")
         dist_value = QLabel(f"{self.__info['distance_km']:.2f} км")
 
@@ -82,8 +83,6 @@ class RouteListPage(QWidget):
         page_layout.setStretch(0, 0)
         page_layout.setStretch(1, 1)
 
-        self.addItem(self, f"Маршрут №{self.__route_id + 1}")
-
     def __generate_instructions(self) -> str:
         """ Генерирует текстовые инструкции по маршруту """
         if not self.__route:
@@ -94,9 +93,9 @@ class RouteListPage(QWidget):
         total_distance = 0
 
         for i, group in enumerate(route_segments):
-            seg_distance = route_segments.get('length_m', 0)
+            seg_distance = group.get('length_m', 0)
             total_distance += seg_distance
-            name = route_segments.get("name", "Без названия")
+            name = group.get("name") or "Без названия"
 
             if i == 0:
                 action = "Старт"
@@ -130,7 +129,7 @@ class RouteListPage(QWidget):
         }
 
         for edge in route[1:]:
-            edge_name = edge.get("name", ""),
+            edge_name = edge.get("name", "")
             edge_length = edge.get("length_m", 0)
             edge_cost = edge.get("cost", 0)
             if edge_name == current_group["name"]:
@@ -146,3 +145,11 @@ class RouteListPage(QWidget):
 
         groups.append(current_group)
         return groups
+
+    @staticmethod
+    def __format_time(minutes: float) -> str:
+        if minutes <= 0:
+            return "0 мин"
+        if minutes < 1:
+            return "< 1 мин"
+        return f"{minutes:.0f} мин"
