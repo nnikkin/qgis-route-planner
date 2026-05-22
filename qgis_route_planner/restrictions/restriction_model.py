@@ -29,7 +29,7 @@ class RestrictionModel(QObject):
 
         self.__name = ""
         self.__comment = ""
-        self.__restriction_type_id = RestrictionType.SIMPLE.value
+        self.__restriction_type_id = None
         self.__point = None
 
         self.__valid_from = None
@@ -63,7 +63,7 @@ class RestrictionModel(QObject):
 
     @restriction_type_id.setter
     def restriction_type_id(self, value: int | None):
-        self.__restriction_type_id = int(value or RestrictionType.SIMPLE.value)
+        self.__restriction_type_id = int(value) if value else None
         self.restriction_type_changed.emit(self.__restriction_type_id)
 
     @property
@@ -203,7 +203,7 @@ class RestrictionModel(QObject):
     def clear_form(self):
         self.name = ""
         self.comment = ""
-        self.restriction_type_id = RestrictionType.SIMPLE.value
+        self.restriction_type_id = None
         self.point = None
         self.valid_from = None
         self.valid_to = None

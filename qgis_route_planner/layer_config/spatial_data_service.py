@@ -20,7 +20,7 @@ class SpatialDataService:
         self.__graph_repo: RoadGraphRepository = graph_repo
         self.__layer_repo: LayerRepository = layer_repo
 
-    def get_spatial_layers(self) -> list[QgsVectorLayer]:
+    def get_spatial_layers(self) -> list:
         if not self.__layer_repo:
             return []
         try:
@@ -31,7 +31,7 @@ class SpatialDataService:
                 operation="get_spatial_layers"
             ) from e
 
-    def get_selected_spatial_layers(self, layers_config: list[Layer]) -> list[QgsVectorLayer]:
+    def get_selected_spatial_layers(self, layers_config: list[Layer]) -> list:
         """ Возвращает выбранные пользователем исходные слои для отображения на карте """
         if not self.__layer_repo:
             return []

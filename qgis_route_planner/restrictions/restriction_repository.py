@@ -182,4 +182,3 @@ class RestrictionRepository:
             return RestrictionType.DIMENSION.value
         if has_temporary:
             return RestrictionType.TEMPORARY.value
-        return RestrictionType.SIMPLE.value

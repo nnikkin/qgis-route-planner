@@ -8,7 +8,7 @@ from .restriction_type import RestrictionType
 @dataclass
 class RestrictionRecord:
     id: int | None = None
-    restriction_type_id: int = RestrictionType.SIMPLE.value
+    restriction_type_id: int | None = None
     name: str = ""
     node_id: int | None = None
     value_num: float | None = None

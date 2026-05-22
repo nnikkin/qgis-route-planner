@@ -351,7 +351,7 @@ class RoadGraphRepository:
         self.__fill_edges_source_target()
         self.__assert_complete_topology()
         #self.__keep_largest_connected_components()
-        self.__remove_orphan_nodes()
+        #self.__remove_orphan_nodes()
         self.__fill_avg_speed()
         self.__fill_edges_cost()
 
@@ -898,7 +898,7 @@ class RoadGraphRepository:
     def __pgr_ksp(self, start_id, end_id, k, profile: VehicleProfile, season_factor: float, route_points=None,
                   restriction_nodes=None):
         """ Используемый алгоритм поиска n маршрутов. """
-        sql_edges_query = self.__routing_edges_sql(profile, season_factor, restriction_nodes)
+        sql_edges_query = self.__routing_edges_sql(profile, season_factor)
         sql_points_query = self.__routing_points_sql(route_points)
 
         is_truck = profile.type == VehicleType.TRUCK
@@ -1156,17 +1156,8 @@ class RoadGraphRepository:
     def __routing_edges_sql(
             self,
             profile: VehicleProfile,
-            season_factor: float,
-            restriction_nodes: list = None,
+            season_factor: float
     ) -> str:
-        restriction_condition = ""
-        if restriction_nodes:
-            ids = ",".join(map(str, restriction_nodes))
-            restriction_condition = f"""
-            AND e.source NOT IN ({ids})
-            AND e.target NOT IN ({ids})
-            """
-
         is_truck = profile.type == VehicleType.TRUCK
         cost_expr = self.__route_cost_expr("e.cost", is_truck, season_factor)
         reverse_cost_expr = self.__route_cost_expr("e.reverse_cost", is_truck, season_factor)
@@ -1177,19 +1168,57 @@ class RoadGraphRepository:
                 WHEN info.max_height IS NOT NULL AND info.max_height < {profile.height} THEN -1
                 WHEN info.max_width_m IS NOT NULL AND info.max_width_m > 0 AND info.max_width_m < {profile.width} THEN -1
                 WHEN info.max_weight_t IS NOT NULL AND info.max_weight_t > 0 AND info.max_weight_t < {profile.weight} THEN -1
+
+                WHEN EXISTS (
+                    SELECT 1 FROM routing.dimension_restrictions dr
+                    JOIN routing.restrictions r ON dr.restriction_id = r.restriction_id
+                    WHERE r.node_id IN (e.source, e.target)
+                      AND (
+                        (dr.max_height_m > 0 AND dr.max_height_m < {profile.height}) OR
+                        (dr.max_width_m > 0 AND dr.max_width_m < {profile.width}) OR
+                        (dr.max_weight_t > 0 AND dr.max_weight_t < {profile.weight})
+                      )
+                ) THEN -1
+
+                WHEN EXISTS (
+                    SELECT 1 FROM routing.temp_restrictions tr
+                    JOIN routing.restrictions r ON tr.restriction_id = r.restriction_id
+                    WHERE r.node_id IN (e.source, e.target)
+                      AND NOW() BETWEEN tr.valid_from AND tr.valid_to
+                ) THEN -1
+
                 ELSE {cost_expr}
             END as cost,
+
             CASE
                 WHEN info.max_height IS NOT NULL AND info.max_height < {profile.height} THEN -1
                 WHEN info.max_width_m IS NOT NULL AND info.max_width_m > 0 AND info.max_width_m < {profile.width} THEN -1
                 WHEN info.max_weight_t IS NOT NULL AND info.max_weight_t > 0 AND info.max_weight_t < {profile.weight} THEN -1
                 WHEN info.is_oneway = TRUE THEN -1
+
+                WHEN EXISTS (
+                    SELECT 1 FROM routing.dimension_restrictions dr
+                    JOIN routing.restrictions r ON dr.restriction_id = r.restriction_id
+                    WHERE r.node_id IN (e.source, e.target)
+                      AND (
+                        (dr.max_height_m > 0 AND dr.max_height_m < {profile.height}) OR
+                        (dr.max_width_m > 0 AND dr.max_width_m < {profile.width}) OR
+                        (dr.max_weight_t > 0 AND dr.max_weight_t < {profile.weight})
+                      )
+                ) THEN -1
+
+                WHEN EXISTS (
+                    SELECT 1 FROM routing.temp_restrictions tr
+                    JOIN routing.restrictions r ON tr.restriction_id = r.restriction_id
+                    WHERE r.node_id IN (e.source, e.target)
+                      AND NOW() BETWEEN tr.valid_from AND tr.valid_to
+                ) THEN -1
+
                 ELSE {reverse_cost_expr}
             END as reverse_cost
             FROM routing.graph_edges e
             INNER JOIN routing.graph_edge_info info ON e.edge_id = info.edge_id
                 {"WHERE info.hgv IS NOT FALSE" if profile.type == VehicleType.TRUCK else "WHERE 1=1"}
-                {restriction_condition}
         """
 
     def __routing_points_sql(self, route_points):

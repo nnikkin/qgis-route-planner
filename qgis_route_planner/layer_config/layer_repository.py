@@ -11,6 +11,7 @@ from qgis_route_planner.layer_config.layer_role import LayerRole
 
 
 class LayerRepository:
+    __LAYER_ROLE_PROP = "qgis_route_planner/layer_role"
     __TEXT_TYPES = {"text", "character varying", "character", "varchar", "char"}
     __NUMERIC_ROLES = {
         ColumnRole.MAX_HEIGHT,
@@ -68,36 +69,24 @@ class LayerRepository:
         """
         return self.__db.execute_query(query, self.__db.schema)
 
-    def get_spatial_layers(self, layers_config: list[Layer] = None):
+    def get_spatial_layers(self, layers_config: list[Layer] = None) -> list[QgsVectorLayer]:
         """ Возвращает пространственные слои из схемы """
         tables = self.get_spatial_tables()
-        layers = []
+
         selected_names = None
         roles_by_name = {}
-
         if layers_config:
-            selected_names = {layer_config.name.split(".", 1)[-1] for layer_config in layers_config}
-            for layer_config in layers_config:
-                table_ref = layer_config.name
-                if "." in table_ref:
-                    table_name = table_ref.split(".", 1)[1]
-                else:
-                    table_name = table_ref
-                roles_by_name[table_name] = layer_config.role
+            roles_by_name = {
+                self.__table_name_only(layer_config.name): layer_config.role
+                for layer_config in layers_config
+            }
+            selected_names = set(roles_by_name.keys())
 
-                geom_col = None
-                for row_schema, row_table, row_geom_col, _geom_type, _srid in tables:
-                    if row_table == table_name:
-                        geom_col = row_geom_col
-                        break
-                if not geom_col:
-                    continue
-
-        for schema_name, table_name, geom_col, geom_type, srid in tables:
+        layers = []
+        for schema_name, table_name, geom_col, _geom_type, _srid in tables:
             if selected_names is not None and table_name not in selected_names:
                 continue
 
-            _ = geom_type, srid
             uri = QgsDataSourceUri()
             uri.setConnection(
                 self.__db.host,
@@ -108,17 +97,24 @@ class LayerRepository:
             )
             uri.setDataSource(schema_name, table_name, geom_col)
 
-            layer = QgsVectorLayer(uri.uri(False), f"{table_name}", "postgres")
-            if layer.isValid():
-                role = roles_by_name.get(table_name)
-                if role:
-                    layer.setCustomProperty("qgis_route_planner/layer_role", role.name)
-                elif table_name == "graph_edges":
-                    layer.setCustomProperty("qgis_route_planner/layer_role", LayerRole.ROADS.name)
-                layers.append(layer)
+            layer = QgsVectorLayer(uri.uri(False), table_name, "postgres")
+            if not layer.isValid():
+                continue
+
+            role = roles_by_name.get(table_name)
+            if role:
+                layer.setCustomProperty(self.__LAYER_ROLE_PROP, role.name)
+            elif table_name == "graph_edges":
+                layer.setCustomProperty(self.__LAYER_ROLE_PROP, LayerRole.ROADS.name)
+
+            layers.append(layer)
 
         return layers
 
+    @staticmethod
+    def __table_name_only(table_ref: str) -> str:
+        """ Отбрасывает префикс схемы у имени таблицы """
+        return table_ref.split(".", 1)[1] if "." in table_ref else table_ref
 
     def get_table_columns(self, table_name: str) -> list:
         return self.__db.get_table_columns(table_name)

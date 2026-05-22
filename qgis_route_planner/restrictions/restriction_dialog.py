@@ -308,7 +308,6 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def __set_type_page(self, restriction_type_id: int):
         page_map = {
-            RestrictionType.SIMPLE.value: 0,
             RestrictionType.DIMENSION.value: 1,
             RestrictionType.TEMPORARY.value: 2,
         }

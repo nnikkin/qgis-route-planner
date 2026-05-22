@@ -21,6 +21,7 @@ from qgis_route_planner.layer_config.layer_role import LayerRole
 
 class MapCanvasManager:
     """ Инкапсулирует временные визуальные объекты на QGIS canvas """
+    __LAYER_ROLE_PROP = "qgis_route_planner/layer_role"
 
     def __init__(self, map_canvas):
         self.__map_canvas = map_canvas
@@ -93,7 +94,7 @@ class MapCanvasManager:
         for i, band_list in enumerate(self.__route_bands):
             is_active = i == active_index
             for band in band_list:
-                band.setColor(Qt.blue if is_active else Qt.darkGray)
+                band.setColor(Qt.green if is_active else Qt.darkGray)
                 band.setWidth(5 if is_active else 3)
                 band.setZValue(1 if is_active else 0)
         self.__map_canvas.refresh()
@@ -110,7 +111,7 @@ class MapCanvasManager:
                 self.__map_canvas.scene().removeItem(band)
         self.__route_bands = []
 
-    def __create_restr_point_marker(self, canvas, x: float, y: float):
+    def __create_restr_point_marker(self, x: float, y: float):
         marker = QgsVertexMarker(self.__map_canvas)
         marker.setCenter(self.__graph_point_to_canvas(QgsPointXY(x, y)))
         marker.setIconType(QgsVertexMarker.IconType.ICON_INVERTED_TRIANGLE)
@@ -121,7 +122,7 @@ class MapCanvasManager:
         return marker
 
     def add_restriction_point_marker(self, node_id: int, x: float, y: float):
-        marker = self.__create_restr_point_marker(self.__map_canvas, x, y)
+        marker = self.__create_restr_point_marker(x, y)
         marker.show()
         self.__restriction_markers[node_id] = marker
 
@@ -137,7 +138,7 @@ class MapCanvasManager:
             if marker_id is None:
                 continue
 
-            marker = self.__create_restr_point_marker(self.__map_canvas, restriction["x"], restriction["y"])
+            marker = self.__create_restr_point_marker(restriction["x"], restriction["y"])
             marker.show()
             self.__visible_restriction_markers[marker_id] = marker
 
@@ -165,15 +166,16 @@ class MapCanvasManager:
         symbol = QgsLineSymbol()
         symbol.deleteSymbolLayer(0)
         line = QgsSimpleLineSymbolLayer()
-        if layer.name() == "graph_edges":
-            line.setColor(Qt.black)
-            line.setWidth(0.5)
-        elif self.__layer_role(layer) == LayerRole.PIPING.name:
-            line.setColor(QColor(20, 120, 190))
-            line.setWidth(0.9)
-        else:
+        if self.__layer_role(layer) == LayerRole.ROADS.name:
             line.setColor(Qt.darkGray)
-            line.setWidth(0.35)
+            line.setWidth(0.4)
+        elif self.__layer_role(layer) == LayerRole.PIPING.name:
+            line.setColor(Qt.blue)
+            #line.setColor(QColor(20, 120, 190))
+            line.setWidth(0.5)
+        else:
+            line.setColor(Qt.gray)
+            line.setWidth(0.25)
         symbol.appendSymbolLayer(line)
         layer.renderer().setSymbol(symbol)
 
@@ -228,8 +230,7 @@ class MapCanvasManager:
         }
         marker.setColor(colors.get(point_type_str, Qt.black))
 
-    @staticmethod
-    def __with_basemap(layers: list[QgsVectorLayer]) -> list:
+    def __with_basemap(self, layers: list[QgsVectorLayer]) -> list:
         from qgis.core import QgsRasterLayer
 
         settings = SettingsService().load_graph_settings()
@@ -238,7 +239,7 @@ class MapCanvasManager:
 
         visible_layers = [
             layer for layer in layers
-            if MapCanvasManager.__is_visible_with_basemap(layer)
+            if self.__is_visible_with_basemap(layer)
         ]
 
         url = (settings.get("basemap_url") or "").strip()
@@ -255,19 +256,17 @@ class MapCanvasManager:
             return visible_layers + [basemap]
         return visible_layers
 
-    @staticmethod
-    def __is_visible_with_basemap(layer) -> bool:
+    def __is_visible_with_basemap(self, layer) -> bool:
         if not isinstance(layer, QgsVectorLayer):
             return True
 
-        role = MapCanvasManager.__layer_role(layer)
+        role = self.__layer_role(layer)
         if role in {LayerRole.ROADS.name, LayerRole.PIPING.name}:
             return True
         return layer.name() == "graph_edges"
 
-    @staticmethod
-    def __layer_role(layer) -> str | None:
-        role = layer.customProperty("qgis_route_planner/layer_role", None)
+    def __layer_role(self, layer) -> str | None:
+        role = layer.customProperty(self.__LAYER_ROLE_PROP, None)
         return str(role) if role else None
 
     def __graph_point_to_canvas(self, point: QgsPointXY) -> QgsPointXY:

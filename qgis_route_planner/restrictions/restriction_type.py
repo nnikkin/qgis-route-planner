@@ -1,9 +1,8 @@
 from enum import Enum
 
 class RestrictionType(Enum):
-    SIMPLE = 1
-    DIMENSION = 2
-    TEMPORARY = 3
+    DIMENSION = 1
+    TEMPORARY = 2
 
     @classmethod
     def get_as_str(cls, restriction_type) -> str:
@@ -15,7 +14,6 @@ class RestrictionType(Enum):
             return "Неизвестно"
 
         names = {
-            cls.SIMPLE.value: "Простое",
             cls.DIMENSION.value: "По габаритам ТС",
             cls.TEMPORARY.value: "По времени",
         }
