@@ -82,6 +82,7 @@ class SettingsDialogController(QObject):
 
 
     def __load_graph_settings(self):
+        """ Загрузить настройки графа в модель """
         try:
             settings = self.__service.load_graph_settings()
             self.__model.point_select_distance = float(settings.get("point_select_distance", 10.0))
@@ -217,6 +218,7 @@ class SettingsDialogController(QObject):
                 profile = self.__profile_provider.create_profile(
                     name.strip(), vehicle_type.name, height, width, depth, weight,
                 )
+                self.__model.selected_profile_id = profile.id
             else:
                 profile_dto = ProfileDto(
                     self.__model.selected_profile_id, name.strip(), vehicle_type.name, height, width, depth, weight,

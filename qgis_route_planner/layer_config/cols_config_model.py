@@ -202,7 +202,7 @@ class ColumnsConfigModel(QObject):
 
     def __guess_column_for_role(self, role: ColumnRole, columns: list[ColumnInfo]) -> str | None:
         candidates_by_role = {
-            ColumnRole.PRIMARY_KEY: ("osm_id", "id", "gid", "fid", "objectid",),
+            ColumnRole.PRIMARY_KEY: ("fid", "id", "gid", "objectid",),
             ColumnRole.GEOMETRY: ("geom", "geometry", "wkb_geometry",),
             ColumnRole.ONEWAY: ("oneway",),
             ColumnRole.HIGHWAY: ("highway",),
