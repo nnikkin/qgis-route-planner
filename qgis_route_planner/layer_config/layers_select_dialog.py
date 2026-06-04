@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from qgis_route_planner.setup.init_dialogs_controller import InitDialogsController
-    from qgis_route_planner.setup.layer_select.layer_config_model import LayerConfigModel, Layer
+    from qgis_route_planner.setup.layer_config_model import LayerConfigModel, Layer
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
 from qgis_route_planner.shared.message_box_mixin import MessageBoxMixin
-from qgis_route_planner.setup.layer_select.layer_role import LayerRole
+from qgis_route_planner.setup.layer_role import LayerRole
 
 
 class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):

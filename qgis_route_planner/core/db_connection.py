@@ -14,7 +14,7 @@ class DbConnection:
         self.schema = schema
 
     def __create_connection(self):
-        """ Создание нового соединение """
+        """ Создание нового соединения """
         kwargs = dict(
             host=self.host,
             port=self.port,
@@ -55,5 +55,5 @@ class DbConnection:
     def has_required_params(self) -> bool:
         return all([self.host, self.port, self.database, self.username])
 
-    def is_complete(self):
+    def is_complete(self) -> bool:
         return self.has_required_params and self.schema is not None

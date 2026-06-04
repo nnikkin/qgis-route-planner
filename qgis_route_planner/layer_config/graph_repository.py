@@ -3,12 +3,12 @@ from __future__ import annotations
 import psycopg.errors
 from psycopg import sql
 
-from qgis_route_planner.setup.layer_select.layer_config_model import Layer
+from layer_config_model import Layer
 from qgis_route_planner.exceptions import NodeNotFoundError
-from qgis_route_planner.setup.layer_select.column_role import ColumnRole
-from qgis_route_planner.setup.layer_select.layer_role import LayerRole
+from qgis_route_planner.layer_config.column_role import ColumnRole
+from layer_role import LayerRole
 from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
-from qgis_route_planner.database.db_connection import DbConnection
+from qgis_route_planner.core.db_connection import DbConnection
 
 
 class RoadGraphRepository:
@@ -1100,7 +1100,7 @@ class RoadGraphRepository:
                    ELSE {reverse_cost_expr}
                END as reverse_cost
         FROM routing.graph_edges
-        {"WHERE hgv IS NOT FALSE" if profile.type.lower() == 'truck' else "WHERE 1=1"}
+        {"WHERE hgv IS NOT FALSE" if profile.type.name.lower() == 'truck' else "WHERE 1=1"}
         {restriction_condition}
     """
 

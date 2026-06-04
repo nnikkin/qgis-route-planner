@@ -3,10 +3,11 @@ from __future__ import annotations
 import psycopg.errors as psycopgError
 from qgis.core import QgsDataSourceUri, QgsVectorLayer
 
-from qgis_route_planner.setup.layer_select.layer_config_model import Layer
+from layer_config_model import Layer
+from graph_repository import RoadGraphRepository
+from layer_repository import LayerRepository
+
 from qgis_route_planner.exceptions import TopologyBuildError, DbConnectionError, DataImportError
-from qgis_route_planner.setup.graph_repository import RoadGraphRepository
-from qgis_route_planner.setup.layer_repository import LayerRepository
 from qgis_route_planner.restrictions.restriction_repository import RestrictionRepository
 
 

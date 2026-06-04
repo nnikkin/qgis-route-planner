@@ -10,15 +10,15 @@ if TYPE_CHECKING:
     from qgis_route_planner.restrictions.restriction_dialog_controller import RestrictionDialogController
     from qgis_route_planner.restrictions.restriction_service import RestrictionService
     from qgis_route_planner.settings.settings_dialog_controller import SettingsDialogController
-    from qgis_route_planner.setup.spatial_data_service import SpatialDataService
+    from qgis_route_planner.setup.spatial_data_service import TableService
     from qgis_route_planner.routing.routing_service import RoutingService
 
 from qgis_route_planner.routing.selected_point_collection import SelectedPointCollection
 from qgis_route_planner.routing.point_type import PointType
+from qgis_route_planner.main.route_export_service import RouteExportService
 
-from qgis.PyQt.QtGui import QImage, QPainter
-from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal, QSize
-from qgis.core import QgsPointXY, QgsMapSettings, QgsMapRendererCustomPainterJob, QgsGeometry
+from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal
+from qgis.core import QgsPointXY
 
 class MainWindowController:
     """ Контроллер главного окна """
@@ -47,7 +47,7 @@ class MainWindowController:
             restriction_model: RestrictionModel,
             settings_controller: SettingsDialogController,
             restr_controller: RestrictionDialogController,
-            data_service: SpatialDataService,
+            data_service: TableService,
             routing_service: RoutingService,
             restriction_service: RestrictionService,
     ):
@@ -67,7 +67,7 @@ class MainWindowController:
             self.__on_current_restriction_changed
         )
 
-        self.__data_service: SpatialDataService = data_service
+        self.__data_service: TableService = data_service
         self.__routing_service: RoutingService = routing_service
         self.__restriction_service: RestrictionService = restriction_service
 
@@ -75,6 +75,7 @@ class MainWindowController:
 
         self.__restriction_points: dict[int, tuple[float, float]] = {}
         self.__map_canvas = None
+        self.__route_export_service = RouteExportService()
 
     def set_map_canvas(self, canvas):
         self.__map_canvas = canvas
@@ -160,178 +161,11 @@ class MainWindowController:
         if route_index < 0 or route_index >= len(routes):
             return
         try:
-            saved_path = self.__save_route_to_file(routes[route_index])
+            saved_path = self.__route_export_service.save_route(routes[route_index], self.__map_canvas)
             if saved_path:
                 self.__model.status_message = f"Маршрут сохранён: {saved_path}"
         except Exception as e:
             self.__model.status_message = f"Ошибка сохранения маршрута: {e}"
-
-    def __save_route_to_file(self, route: list[dict]):
-        """ Формирование HTML-файла с выбранным маршрутом """
-        from qgis.PyQt.QtWidgets import QFileDialog
-        import base64
-
-        file_path, _ = QFileDialog.getSaveFileName(
-            None,
-            "Выберите место для сохранения файла",
-            "",
-            "HTML-файл (*.html)",
-        )
-        if not file_path:
-            return
-
-        if not file_path.endswith(".html"):
-            file_path += ".html"
-
-        total_distance = sum(e["length_m"] for e in route) / 1000
-        total_time = sum(e["cost"] for e in route) / 60
-
-        rows = ""
-        for i, edge in enumerate(route):
-            if i == 0:
-                action = "Старт"
-            elif i == len(route) - 1:
-                action = "Финиш"
-            else:
-                action = "Продолжайте движение"
-            name = edge.get("name") or ""
-            dist = edge.get("length_m", 0)
-            rows += f"""
-            <tr>
-                <td>{i + 1}</td>
-                <td>{action}</td>
-                <td>{name}</td>
-                <td>{dist:.0f} м</td>
-            </tr>"""
-
-        # Экспорт карты в base64
-        map_b64 = ""
-        image = self.__export_route_image(route)
-        if image and not image.isNull():
-            from qgis.PyQt.QtCore import QBuffer, QByteArray, QIODevice
-            byte_array = QByteArray()
-            buffer = QBuffer(byte_array)
-            buffer.open(QIODevice.WriteOnly)
-            image.save(buffer, "PNG")
-            map_b64 = base64.b64encode(byte_array.data()).decode("utf-8")
-
-        map_html = (
-            f'<img src="data:image/png;base64,{map_b64}" style="width:100%;height:100%;object-fit:contain;" alt="Карта маршрута">'
-            if map_b64 else
-            '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888;">Карта недоступна</div>'
-        )
-
-        html = f"""<!DOCTYPE html>
-    <html lang="ru">
-    <head>
-        <meta charset="UTF-8">
-        <title>Маршрут</title>
-        <style>
-            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-            body {{ font-family: Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; }}
-            header {{ padding: 12px 20px; background: #f0f0f0; border-bottom: 1px solid #ccc; flex-shrink: 0; }}
-            header h2 {{ font-size: 16px; margin-bottom: 4px; }}
-            header .summary {{ font-size: 13px; color: #555; }}
-            .content {{ display: flex; flex: 1; overflow: hidden; }}
-            .map-panel {{ flex: 1; overflow: hidden; background: #e8e8e8; }}
-            .table-panel {{ width: 420px; flex-shrink: 0; overflow-y: auto; border-left: 1px solid #ccc; }}
-            table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
-            th {{ background: #f0f0f0; border: 1px solid #ccc; padding: 7px 8px; text-align: left; position: sticky; top: 0; }}
-            td {{ border: 1px solid #ddd; padding: 6px 8px; vertical-align: top; }}
-            tr:nth-child(even) td {{ background: #fafafa; }}
-        </style>
-    </head>
-    <body>
-        <header>
-            <h2>Маршрут</h2>
-            <span class="summary">
-                <b>Длина:</b> {total_distance:.2f} км &nbsp;|&nbsp;
-                <b>Время:</b> {total_time:.0f} мин
-            </span>
-        </header>
-        <div class="content">
-            <div class="map-panel">{map_html}</div>
-            <div class="table-panel">
-                <table>
-                    <thead>
-                        <tr><th>#</th><th>Действие</th><th>Улица</th><th>Расстояние</th></tr>
-                    </thead>
-                    <tbody>{rows}</tbody>
-                </table>
-            </div>
-        </div>
-    </body>
-    </html>"""
-
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(html)
-        Logger.info(f"Файл сохранён: {file_path}")
-        return file_path
-
-    def __export_route_image(self, route: list[dict],
-                           width: int = 1920, height: int = 1080) -> QImage:
-        from qgis.PyQt.QtGui import QPen, QColor
-        from qgis.PyQt.QtCore import QPointF
-
-        extent = self.__get_route_extent(route)
-        if extent is None or self.__map_canvas is None:
-            return None
-
-        extent.grow(extent.width() * 0.1)
-        layers = self.__map_canvas.layers()
-
-        settings = QgsMapSettings()
-        settings.setLayers(layers)
-        settings.setExtent(extent)
-        settings.setOutputSize(QSize(width, height))
-        white = QColor("white")
-        settings.setBackgroundColor(white)
-
-        image = QImage(QSize(width, height), QImage.Format_ARGB32)
-        image.fill(white)
-
-        painter = QPainter(image)
-
-        # Рендерим фоновые слои
-        job = QgsMapRendererCustomPainterJob(settings, painter)
-        job.start()
-        job.waitForFinished()
-
-        # Рисуем маршрут поверх карты
-        pen = QPen(QColor(0, 100, 255))
-        pen.setWidth(4)
-        painter.setPen(pen)
-
-        transform = settings.mapToPixel()
-
-        for edge in route:
-            geom = QgsGeometry.fromWkt(edge["geom"])
-            if geom.isNull():
-                continue
-
-            # Итерируем по вершинам линии
-            vertices = list(geom.vertices())
-            for i in range(len(vertices) - 1):
-                p1 = transform.transform(vertices[i].x(), vertices[i].y())
-                p2 = transform.transform(vertices[i + 1].x(), vertices[i + 1].y())
-                painter.drawLine(
-                    QPointF(p1.x(), p1.y()),
-                    QPointF(p2.x(), p2.y())
-                )
-
-        painter.end()
-        return image
-
-    def __get_route_extent(self, route: list[dict]):
-        from qgis.core import QgsGeometry
-        extent = None
-        for edge in route:
-            geom = QgsGeometry.fromWkt(edge["geom"])
-            if geom.isNull():
-                continue
-            bb = geom.boundingBox()
-            extent = bb if extent is None else (extent.combineExtentWith(bb) or extent)
-        return extent
 
     def __try_build_routes(self):
         if not self.__current_route.has_required_points():

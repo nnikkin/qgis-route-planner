@@ -1,13 +1,16 @@
 from enum import Enum
 
 class RestrictionType(Enum):
-    SIMPLE = "Простое"
-    TEMPORARY = "По времени"
-    DIMENSION = "По габаритам ТС"
+    SIMPLE = 1
+    DIMENSION = 2
+    TEMPORARY = 3
 
     @classmethod
-    def from_value(cls, value: str):
-        for item in cls:
-            if item.value == value:
-                return item
-        raise ValueError(f"Неизвестный тип ограничения: {value}")
+    def get_as_str(self, restriction_type: int) -> str:
+        match restriction_type:
+            case RestrictionType.SIMPLE.value:
+                return "Простое"
+            case RestrictionType.DIMENSION.value:
+                return "По габаритам ТС"
+            case RestrictionType.TEMPORARY:
+                return "По времени"

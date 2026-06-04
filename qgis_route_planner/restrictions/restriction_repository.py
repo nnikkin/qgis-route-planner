@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import psycopg.errors
 
-from qgis_route_planner.restrictions.restriction_record import RestrictionRecord
-from qgis_route_planner.database.db_connection import DbConnection
+from qgis_route_planner.restrictions import RestrictionRecord, RestrictionType
+from qgis_route_planner.core.db_connection import DbConnection
 
 
 class RestrictionRepository:
@@ -16,8 +16,7 @@ class RestrictionRepository:
         self.__db.execute_nonquery("""
             CREATE TABLE IF NOT EXISTS routing.restriction_types (
                 restriction_type_id SMALLINT PRIMARY KEY,
-                code TEXT UNIQUE NOT NULL,
-                name TEXT NOT NULL
+                code TEXT UNIQUE NOT NULL
             )
         """)
 
@@ -57,9 +56,9 @@ class RestrictionRepository:
 
         existing = {row[0] for row in self.get_types()}
         defaults = [
-            (1, "simple", "Простое"),
-            (2, "dimension", "Габаритное"),
-            (3, "temporary", "Временное"),
+            (RestrictionType.SIMPLE.value, RestrictionType.SIMPLE.name),
+            (RestrictionType.DIMENSION.value, RestrictionType.DIMENSION.name),
+            (RestrictionType.TEMPORARY.value, RestrictionType.TEMPORARY.name),
         ]
         for type_id, code, name in defaults:
             if type_id in existing:
@@ -68,11 +67,11 @@ class RestrictionRepository:
                 self.__db.execute_nonquery(
                     """
                     INSERT INTO routing.restriction_types
-                        (restriction_type_id, code, name)
-                    VALUES (%s, %s, %s)
+                        (restriction_type_id, code)
+                    VALUES (%s, %s)
                     ON CONFLICT (restriction_type_id) DO NOTHING
                     """,
-                    type_id, code, name,
+                    type_id, code,
                 )
             except psycopg.errors.DuplicateColumn:
                 pass

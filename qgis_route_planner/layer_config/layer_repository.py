@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from qgis_route_planner.database.db_connection import DbConnection
+from qgis_route_planner.core.db_connection import DbConnection
 
 class LayerRepository:
     def __init__(self, db: DbConnection):
@@ -55,16 +55,6 @@ class LayerRepository:
         if result:
             return result[0]
         return 0, 0, 0, 0
-
-    def get_all_schemas(self) -> list[tuple]:
-        query = """
-            SELECT schema_name
-                FROM information_schema.schemata
-                WHERE
-                    schema_name NOT IN ('information_schema', 'pg_catalog') AND
-                    schema_name NOT LIKE 'pg_%%' AND schema_name <> 'routing';
-         """
-        return self.__db.execute_query(query)
 
     def get_all_tables(self, schema: str) -> list[tuple]:
         query = """

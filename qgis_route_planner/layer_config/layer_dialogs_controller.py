@@ -1,25 +1,20 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from qgis_route_planner.setup.db_con_init.db_config_model import DbConfigModel
-    from qgis_route_planner.setup.layer_select.layer_config_model import LayerConfigModel
-    from qgis_route_planner.setup.layer_select.cols_config_model import ColumnsConfigModel
-    from qgis_route_planner.setup.spatial_data_service import SpatialDataService
+    from layer_config_model import LayerConfigModel
+    from qgis_route_planner.layer_config.cols_config_model import ColumnsConfigModel
+    from spatial_data_service import SpatialDataService
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 
-from qgis_route_planner.setup.layer_select.column_role import ColumnRole
-from qgis_route_planner.setup.layer_select.layer_role import LayerRole
+from qgis_route_planner.layer_config.column_role import ColumnRole
+from layer_role import LayerRole
 
 
-class InitDialogsController:
+class LayerDialogsController:
     """ Контроллер окон инициализации плагина """
-
-    con_test_requested = pyqtSignal()
-    con_params_obtained = pyqtSignal()
     layers_selected = pyqtSignal()
     columns_configured = pyqtSignal()
-    schemas_loaded = pyqtSignal(list)
 
     connection_failed = pyqtSignal(str)
     layer_selection_failed = pyqtSignal(str)
@@ -32,74 +27,23 @@ class InitDialogsController:
 
     def __init__(
             self,
-            db_config_model: DbConfigModel,
             layer_config_model: LayerConfigModel,
             columns_config_model: ColumnsConfigModel,
             service: SpatialDataService = None,
     ):
         super().__init__()
 
-        self.__db_config_model: DbConfigModel = db_config_model
         self.__layer_config_model: LayerConfigModel = layer_config_model
         self.__columns_config_model: ColumnsConfigModel = columns_config_model
 
         self.__service = service
+        self.__schema: str = ""
+
+    def set_schema(self, schema: str):
+        self.__schema = schema
 
     def set_service(self, service: SpatialDataService):
         self.__service = service
-
-    @pyqtSlot()
-    def initialization_cancelled(self):
-        self.init_cancelled.emit()
-
-    @pyqtSlot()
-    def request_connection(self):
-        self.__service = None
-        self.con_test_requested.emit()
-
-# для DbConnectionSetupDialog
-    @pyqtSlot(str)
-    def change_host_value(self, new_value: str):
-        self.__db_config_model.host = new_value
-
-    @pyqtSlot(str)
-    def change_port_value(self, new_value: str):
-        self.__db_config_model.port = new_value
-
-    @pyqtSlot(str)
-    def change_username_value(self, new_value: str):
-        self.__db_config_model.username = new_value
-
-    @pyqtSlot(str)
-    def change_password_value(self, new_value: str):
-        self.__db_config_model.password = new_value
-
-    @pyqtSlot(str)
-    def change_database_value(self, new_value: str):
-        self.__db_config_model.database = new_value
-
-    @pyqtSlot(str)
-    def change_schema_value(self, new_value: str):
-        self.__db_config_model.schema = new_value
-
-    @pyqtSlot()
-    def validate_values_for_schema(self):
-        return self.__db_config_model.validate_values_for_schema()
-
-    @pyqtSlot()
-    def validate_connection_step(self):
-        return self.__db_config_model.validate_all_values()
-
-    @pyqtSlot()
-    def get_schemas(self) -> list[str]:
-        if self.__service is None:
-            self.connection_failed.emit("Не удалось подключиться.\nПроверьте правильность введённых данных.")
-            return []
-        return self.__service.get_schemas()
-
-    @pyqtSlot()
-    def connection_step_finish(self):
-        self.con_params_obtained.emit()
 
 
 # для SelectLayersDialog
@@ -108,7 +52,12 @@ class InitDialogsController:
         if self.__service is None:
             self.layer_selection_failed.emit("Не удалось подключиться.\nВернитесь к настройке подключения.")
             return []
-        return self.__service.get_tables(self.__db_config_model.schema)
+
+        if not self.__schema:
+            self.layer_selection_failed.emit("Не выбрана схема базы данных.")
+            return []
+
+        return self.__service.get_tables(self.__schema)
 
     @pyqtSlot(str, object, object)
     def add_layer_to_config(self, layer_name: str, layer_role: LayerRole):

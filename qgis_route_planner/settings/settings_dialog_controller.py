@@ -1,16 +1,17 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+
+from qgis_route_planner.settings.profile_provider import ProfileProvider
+from qgis_route_planner.settings.weather_provider import WeatherSettingsProvider
+
 if TYPE_CHECKING:
     from settings_model import SettingsModel
     from settings_service import SettingsService
-    from qgis_route_planner.vehicle.vehicle_service import VehicleService
     from qgis_route_planner.vehicle.vehicle_type import VehicleType
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
 
-from qgis_route_planner.shared.form_mode import FormMode
-from qgis_route_planner.routing.weather_service import WeatherService
-from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
+from qgis_route_planner.presentation import FormMode
 
 
 class SettingsDialogController:
@@ -35,13 +36,15 @@ class SettingsDialogController:
             self,
             model: SettingsModel,
             settings_service: SettingsService,
-            vehicle_service: VehicleService,
+            profile_provider: ProfileProvider,
+            weather_provider: WeatherSettingsProvider
     ):
         super().__init__()
 
         self.__model = model
         self.__service = settings_service
-        self.__vehicle_service = vehicle_service
+        self.__profile_provider = profile_provider
+        self.__weather_provider = weather_provider
 
     def open_dialog_tab(self, tab_index: int = 0):
         """ Открыть диалог настроек """
@@ -72,7 +75,7 @@ class SettingsDialogController:
     def __load_profiles(self):
         """ Загрузить список профилей в модель """
         try:
-            self.__model.profiles = self.__vehicle_service.get_profiles()
+            self.__model.profiles = self.__profile_provider.get_profiles()
             self.__model.active_profile_id = self.__service.get_active_profile_id()
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профилей ТС: {e}")
@@ -143,8 +146,7 @@ class SettingsDialogController:
             self.show_warning.emit("Введите API-ключ OpenWeatherMap.")
             return
 
-        weather_service = WeatherService(api_url=api_url.strip(), api_key=api_key.strip())
-        if weather_service.test_connection():
+        if self.__weather_provider.test_connection():
             self.show_info.emit("Подключение к OpenWeatherMap успешно проверено")
         else:
             self.show_error.emit("Не удалось подключиться к OpenWeatherMap. Проверьте правильность ввода API-ключа.")
@@ -179,7 +181,7 @@ class SettingsDialogController:
             self.__model.current_profile_data = None
             return
         try:
-            profile = self.__vehicle_service.get_profile_by_id(self.__model.current_profile_id)
+            profile = self.__profile_provider.get_profile_by_id(self.__model.current_profile_id)
             self.__model.current_profile_data = profile
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профиля: {e}")
@@ -210,23 +212,22 @@ class SettingsDialogController:
             return
 
         try:
+            profile = self.__profile_provider.create_profile(
+                name=name.strip(),
+                type=vehicle_type,
+                height_m=height,
+                width_m=width,
+                depth_m=depth,
+                weight_t=weight,
+            )
+            self.__model.current_profile_id = profile.id
+
             if mode == FormMode.CREATE:
                 # Создание нового профиля
-                profile_id = self.__vehicle_service.create_profile(name.strip(), vehicle_type, height, width, depth, weight)
-                self.__model.current_profile_id = profile_id
                 self.show_info.emit("Профиль успешно создан!")
             else:
                 # Обновление существующего
-                profile = VehicleProfile(
-                    name=name.strip(),
-                    type=vehicle_type.name,
-                    height_m=height,
-                    width_m=width,
-                    depth_m=depth,
-                    weight_t=weight,
-                )
-                profile.id = self.__model.current_profile_id
-                self.__vehicle_service.update_profile(self.__model.current_profile_id, profile)
+                self.__profile_provider.update_profile(self.__model.current_profile_id, profile)
                 self.show_info.emit("Профиль успешно обновлен!")
 
             # Обновить список профилей
@@ -245,7 +246,7 @@ class SettingsDialogController:
             return
 
         try:
-            profile = self.__vehicle_service.get_profile_by_id(profile_id)
+            profile = self.__profile_provider.get_profile_by_id(profile_id)
             if profile is None:
                 return
 
@@ -270,7 +271,7 @@ class SettingsDialogController:
                 self.__service.set_active_profile_id(None)
                 self.__model.active_profile_id = None
 
-            self.__vehicle_service.delete_profile(profile_id)
+            self.__profile_provider.delete_profile(profile_id)
             self.__model.current_profile_id = None
             self.__model.current_profile_data = None
             self.__model.editing_mode = FormMode.EMPTY

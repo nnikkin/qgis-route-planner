@@ -12,7 +12,7 @@ class VehicleService:
         try:
             profile = VehicleProfile(
                 name=name,
-                type=vtype.name,
+                type=vtype,
                 height_m=height,
                 width_m=width,
                 depth_m=depth,

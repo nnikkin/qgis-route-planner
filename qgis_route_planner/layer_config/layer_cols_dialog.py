@@ -2,15 +2,15 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from qgis_route_planner.setup.init_dialogs_controller import InitDialogsController
-    from qgis_route_planner.setup.layer_select.cols_config_model import ColumnsConfigModel
-    from qgis_route_planner.setup.layer_select.cols_config_model import ColumnInfo
+    from column_dialog_controller import ColmunDialogController
+    from cols_config_model import ColumnsConfigModel
+    from cols_config_model import ColumnInfo
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 
-from qgis_route_planner.shared.message_box_mixin import MessageBoxMixin
-from qgis_route_planner.setup.layer_select.column_role import ColumnRole
+from qgis_route_planner.presentation import MessageBoxMixin
+from column_role import ColumnRole
 
 
 class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -19,7 +19,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __init__(
             self,
             model: ColumnsConfigModel,
-            controller: InitDialogsController,
+            controller: ColmunDialogController,
             parent: QObject = None
     ):
         super().__init__(parent)
