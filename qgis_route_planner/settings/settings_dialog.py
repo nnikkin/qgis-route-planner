@@ -59,7 +59,6 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__cancelProfileEditButton.clicked.connect(self.__controller.cancel_profile_edit)
         self.__setActiveProfileButton.clicked.connect(self.__controller.set_active_profile)
         self.__profilesListWidget.itemSelectionChanged.connect(self.__on_profile_selection_changed)
-        self.__profilesListWidget.itemDoubleClicked.connect(self.__on_profile_double_clicked)
 
         self.__rebuildGraphButton.clicked.connect(self.__on_rebuild_graph_clicked)
         self.__saveGraphSettingsButton.clicked.connect(self.__on_save_graph_settings_clicked)
@@ -695,13 +694,6 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         """ Обработчик изменения выделения в списке профилей """
         profile_id = self.__get_selected_profile_id()
         self.__controller.select_profile(profile_id)
-
-    def __on_profile_double_clicked(self, item):
-        """ Обработчик двойного клика по профилю """
-        profile_id = item.data(QtCore.Qt.ItemDataRole.UserRole)
-        if profile_id is not None:
-            self.__controller.select_profile(profile_id)
-            self.__controller.set_active_profile()
 
     def __get_selected_profile_id(self) -> int | None:
         """ Получить ID выбранного профиля"""
