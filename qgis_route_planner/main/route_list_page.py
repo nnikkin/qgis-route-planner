@@ -40,7 +40,7 @@ class RouteListPage(QWidget):
 
         save_btn = QPushButton()
         __icon = QIcon()
-        __icon.addPixmap(QPixmap(":/route_list_icons/save_icon"))
+        __icon.addPixmap(QPixmap(f":/route_list_icons/save_icon"))
         save_btn.setIcon(__icon)
         save_btn.setObjectName(f"save_btn_{self.__route_id}")
         save_btn.clicked.connect(lambda checked=False, rid=self.__route_id: self.route_save_requested.emit(rid))

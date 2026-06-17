@@ -83,16 +83,3 @@ class VehicleProfileRepository:
             "weight_t": profile.weight_t,
             "depth_m": profile.depth_m
         }
-
-if __name__ == "__main__":
-    vehicle_repo = VehicleProfileRepository()
-    v = VehicleProfile(
-        name="a",
-        type=VehicleType.CAR,
-        height_m=0.1,
-        width_m=0.1,
-        weight_t=0.1,
-        depth_m=0.1
-    )
-    vehicle_repo.add_profile(v)
-    print(vehicle_repo.get_all())

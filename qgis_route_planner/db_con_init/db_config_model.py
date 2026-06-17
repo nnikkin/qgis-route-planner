@@ -11,6 +11,7 @@ class DbConfigModel(QObject):
     schema_changed = pyqtSignal(str)
     schemas_obtained = pyqtSignal(list)
     any_field_changed = pyqtSignal()
+    visibility_changed = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__()
@@ -22,6 +23,7 @@ class DbConfigModel(QObject):
         self.__database = ""
         self.__schema = ""
         self.__schemas = []
+        self.__is_password_visible = False
 
         for s in (
                 self.host_changed,
@@ -94,6 +96,15 @@ class DbConfigModel(QObject):
     def schemas(self, value:list[str]):
         self.__schemas = value
         self.schemas_obtained.emit(value)
+
+    @property
+    def is_password_visible(self):
+        return self.__is_password_visible
+
+    @is_password_visible.setter
+    def is_password_visible(self, value):
+        self.__is_password_visible = value
+        self.visibility_changed.emit(self.__is_password_visible)
 
     def validate_values_for_schema(self):
         """ Проверка введённых значений, нужных для получения списка схем """

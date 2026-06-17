@@ -18,8 +18,8 @@ class QgisRoutePlanner:
         self.icon_path = f":/plugins/qgis_route_planner/plugin_icon"
 
         app = QApplication.instance()
-        if app:
-            app.setWindowIcon(QIcon(self.icon_path))
+        #if app:
+        #    app.setWindowIcon(QIcon(self.icon_path))
 
         self.__orchestrator: PluginCoordinator = PluginCoordinator()
         self.__orchestrator.plugin_initialized.connect(self.__on_initialized)

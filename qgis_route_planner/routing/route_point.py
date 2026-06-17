@@ -9,7 +9,7 @@ class RoutePoint:
     id: int
     qgs_point_xy: QgsPointXY
     point_type: PointType
-    order: int | None
+    order: int = None
     node_id: int = None
     edge_id: int = None
     fraction: float = None

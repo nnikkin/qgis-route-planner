@@ -38,7 +38,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     def __setupUi(self):
         self.setObjectName("PluginMainWindow")
-        self.resize(800, 600)
+        self.resize(1000, 700)
         self.setWindowIcon(QIcon(":/plugins/qgis_route_planner/plugin_icon"))
 
         self.central_widget = QtWidgets.QWidget(self)
@@ -59,26 +59,31 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.points_list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
         self.points_list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.points_list_widget.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.InternalMove)
-        self.points_gridLayout.addWidget(self.points_list_widget, 0, 0, 1, 1)
+        self.points_gridLayout.addWidget(self.points_list_widget, 0, 0)
         self.tabWidget.addTab(self.tab_points, "Точки")
 
         self.point_buttons_layout = QtWidgets.QVBoxLayout(self.tab_points)
+
         self.move_point_up_btn = QtWidgets.QPushButton(self.tab_points)
         self.move_point_up_btn.setText("↑")
+        self.move_point_up_btn.setToolTip("Переместить точку выше")
         self.move_point_up_btn.setEnabled(False)
-        self.points_gridLayout.addWidget(self.move_point_up_btn, 0, 0, 1, 1)
+        self.point_buttons_layout.addWidget(self.move_point_up_btn)
 
-        self.point_buttons_layout = QtWidgets.QVBoxLayout(self.tab_points)
         self.move_point_down_btn = QtWidgets.QPushButton(self.tab_points)
         self.move_point_down_btn.setText("↓")
+        self.move_point_down_btn.setToolTip("Переместить точку ниже")
         self.move_point_down_btn.setEnabled(False)
-        self.points_gridLayout.addWidget(self.move_point_down_btn, 0, 0, 1, 1)
+        self.point_buttons_layout.addWidget(self.move_point_down_btn)
 
-        self.point_buttons_layout = QtWidgets.QVBoxLayout(self.tab_points)
         self.delete_point_btn = QtWidgets.QPushButton(self.tab_points)
-        self.delete_point_btn.setIcon(QIcon(QPixmap(":points_list_icons/map_delete_point")))
+        self.delete_point_btn.setIcon(QIcon(QPixmap(f":points_list_icons/map_delete_point")))
+        self.delete_point_btn.setToolTip("Удалить точку")
         self.delete_point_btn.setEnabled(False)
-        self.points_gridLayout.addWidget(self.delete_point_btn, 0, 0, 1, 1)
+        self.point_buttons_layout.addWidget(self.delete_point_btn)
+
+        self.point_buttons_layout.addStretch()
+        self.points_gridLayout.addLayout(self.point_buttons_layout, 0, 1, Qt.AlignmentFlag.AlignTop)
 
         # Вкладка "Маршруты"
         self.tab_routes = QtWidgets.QWidget()
@@ -89,7 +94,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         self.verticalLayout.addWidget(self.tabWidget)
 
-        self.clear_list_button = QtWidgets.QPushButton("Построить новый маршрут", self.central_widget)
+        self.clear_list_button = QtWidgets.QPushButton("Очистить", self.central_widget)
         self.clear_list_button.setEnabled(False)
         self.verticalLayout.addWidget(self.clear_list_button)
 
@@ -133,7 +138,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
         self.__retranslateUi()
         self.tabWidget.setCurrentIndex(0)
-        QtCore.QMetaObject.connectSlotsByName(self)
 
         self.__setup_map_tools()
         self.__connect()
@@ -145,10 +149,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.setWindowTitle(_translate("MainWindow", "Поиск маршрутов"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_points), _translate("MainWindow", "Точки"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_routes), _translate("MainWindow", "Маршруты"))
-        self.move_point_up_btn.setText(_translate("MainWindow", "Переместить точку выше"))
-        self.move_point_down_btn.setText(_translate("MainWindow", "Переместить точку ниже"))
-        self.delete_point_btn.setText(_translate("MainWindow", "Удалить точку маршрута"))
-        self.clear_list_button.setText(_translate("MainWindow", "Построить новый маршрут"))
+        self.clear_list_button.setText(_translate("MainWindow", "Очистить"))
         self.settings_menu.setTitle(_translate("MainWindow", "Настройки"))
         self.view_menu.setTitle(_translate("MainWindow", "Вид"))
         self.about_menu.setTitle(_translate("MainWindow", "Справка"))
@@ -174,7 +175,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__model.active_route_changed.connect(self.__on_active_route_changed)
         self.__model.statusbar_message_changed.connect(self.__on_status_message_changed)
         self.__model.active_tab_changed.connect(self.tabWidget.setCurrentIndex)
-        self.__model.clear_button_enabled_changed.connect(self.__on_clear_button_enabled_changed)
         self.__model.restriction_select_mode_activated.connect(self.__on_point_select_mode_changed)
         self.__model.restrictions_visible_changed.connect(self.__on_restrictions_visible_changed)
 
@@ -227,8 +227,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.route_list_widget.route_selected.connect(self.__controller.on_route_selected)
         self.route_list_widget.route_save_requested.connect(self.__controller.on_save_route)
 
-    @pyqtSlot(object, object)
-    def __on_point_selection_changed(self, current):
+    def __on_point_selection_changed(self, current, previous):
         has_selection = current is not None
         point_id = current.data(Qt.ItemDataRole.UserRole) if has_selection else None
         self.__controller.set_selected_point(point_id)
@@ -246,15 +245,23 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.points_list_widget.clear()
 
         for route_point in points:
-            if route_point.point_type == PointType.START.name:
+            print(f"point(id={route_point.id},{route_point.point_type}) is None = {route_point is None}")
+            if route_point.point_type == PointType.START:
                 prefix = "НАЧАЛО"
-            elif route_point.point_type == PointType.END.name:
+            elif route_point.point_type == PointType.END:
                 prefix = "КОНЕЦ"
+            elif route_point.point_type == PointType.WAYPOINT:
+                prefix = f"Пункт {route_point.order}"
             else:
-                prefix = f"Точка {route_point.order}"
+                prefix = "Точка"
+
+            if route_point.address:
+                point_info = route_point.address
+            else:
+                point_info = f"({route_point.x}, {route_point.y})"
 
             item = QtWidgets.QListWidgetItem(
-                f"{prefix}: ({route_point.x:.6f}, {route_point.y:.6f})"
+                f"{prefix}: {point_info}"
             )
             item.setData(Qt.ItemDataRole.UserRole, route_point.id)
             self.points_list_widget.addItem(item)
@@ -271,6 +278,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.move_point_up_btn.setEnabled(has_selection and idx > 0)
         self.move_point_down_btn.setEnabled(has_selection and idx < count - 1)
         self.delete_point_btn.setEnabled(has_selection)
+        self.__on_clear_button_enabled_changed()
 
     @pyqtSlot(list)
     def __on_routes_changed(self, routes: list):
@@ -310,10 +318,9 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         else:
             self.statusBar().showMessage(message)
 
-    @pyqtSlot(bool)
-    def __on_clear_button_enabled_changed(self, enabled: bool):
+    def __on_clear_button_enabled_changed(self):
         self.clear_list_button.setEnabled(
-            enabled and not self.__model.restriction_select_mode
+            len(self.__model.points) > 0 and not self.__model.restriction_select_mode
         )
 
     @pyqtSlot(bool)
@@ -346,20 +353,20 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             menu.addAction(action)
 
         else:
-            points = self.__model.points
-            has_start = any(p.point_type == PointType.START.name for p in points)
-            has_end = any(p.point_type == PointType.END.name for p in points)
+            has_start = self.__model.has_start_set()
+            has_end = self.__model.has_end_set()
 
             actions = [
                 ("Маршрут отсюда", PointType.START, not has_start),
                 ("Маршрут сюда", PointType.END, has_start and not has_end),
                 ("Добавить промежуточную точку", PointType.WAYPOINT, has_start)
             ]
+
             for title, point_type, enabled in actions:
                 action = QAction(title, menu)
                 action.triggered.connect(
-                    lambda checked=False, pt=point_type, p=point, s=snap_info:
-                    self.__controller.on_add_route_point(p, pt, s)
+                    lambda checked=False, ptype=point_type, p=point, info=snap_info:
+                    self.__controller.on_add_route_point(p, ptype, info)
                 )
                 action.setEnabled(enabled)
                 menu.addAction(action)
@@ -368,7 +375,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(object)
     def __add_point_marker(self, route_point: RoutePoint):
-        print(self.__model.points)
         self.__map_manager.add_point_marker(route_point)
 
     @pyqtSlot(int)
@@ -385,7 +391,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
     def __display_routes(self, routes: list):
         self.__map_manager.display_routes(routes)
 
-    @pyqtSlot()
     def __clear_map_visuals(self):
         self.__map_manager.clear_map_visuals()
         self.points_list_widget.clear()
@@ -451,7 +456,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         ):
             widget.setEnabled(not locked)
 
-        self.__on_clear_button_enabled_changed(self.__model.clear_button_enabled)
+        self.__on_clear_button_enabled_changed()
 
     def __open_about_dialog(self):
         self._show_info(
