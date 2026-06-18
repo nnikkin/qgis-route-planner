@@ -100,4 +100,4 @@ class SpatialDataService:
         except (DataImportError, TopologyBuildError):
             raise
         except psycopgError.Error as e:
-            raise TopologyBuildError("Не удалось построить топологию графа") from e
+            raise TopologyBuildError(f"Не удалось построить топологию графа:\n{e}") from e

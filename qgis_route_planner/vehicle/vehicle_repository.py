@@ -36,12 +36,17 @@ class VehicleProfileRepository:
     def upd_profile(self, profile_id: int, profile: VehicleProfile):
         profiles = self.__load_profiles()
         profile.id = profile_id
+
+        found = False
         for index, item in enumerate(profiles):
             if item.get("id") == profile_id:
                 profiles[index] = self.__profile_to_dict(profile)
-                self.__save_profiles(profiles)
-                return
-        profiles.append(self.__profile_to_dict(profile))
+                found = True
+                break
+
+        if not found:
+            raise ValueError(f"Профиль с ID {profile_id} не найден для обновления.")
+
         self.__save_profiles(profiles)
 
     def __load_profiles(self) -> list[dict]:
@@ -62,14 +67,15 @@ class VehicleProfileRepository:
 
     @staticmethod
     def __dict_to_profile(data: dict) -> VehicleProfile:
+        raw_type = data.get("type")
         return VehicleProfile(
             id=data.get("id"),
             name=data.get("name", ""),
-            type=data.get("type", VehicleType.CAR),
-            height_m=float(data.get("height_m") or 0.01),
-            width_m=float(data.get("width_m") or 0.01),
-            weight_t=float(data.get("weight_t") or 0.01),
-            depth_m=float(data.get("depth_m") or 0.01),
+            type=VehicleType[raw_type] if raw_type else VehicleType.CAR,
+            height=float(data.get("height") or 0.01),
+            width=float(data.get("width") or 0.01),
+            weight=float(data.get("weight") or 0.01),
+            depth=float(data.get("depth") or 0.01),
         )
 
     @staticmethod
@@ -77,9 +83,9 @@ class VehicleProfileRepository:
         return {
             "id": profile.id,
             "name": profile.name,
-            "type": profile.type.name,
-            "height_m": profile.height_m,
-            "width_m": profile.width_m,
-            "weight_t": profile.weight_t,
-            "depth_m": profile.depth_m
+            "type": profile.type.name if isinstance(profile.type, VehicleType) else profile.type,
+            "height": profile.height,
+            "width": profile.width,
+            "weight": profile.weight,
+            "depth": profile.depth,
         }

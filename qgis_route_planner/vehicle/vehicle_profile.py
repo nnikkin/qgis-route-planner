@@ -8,7 +8,7 @@ class VehicleProfile:
     id: int | None = None
     name: str = ""
     type: VehicleType = None
-    height_m: float = 0.0
-    width_m: float = 0.0
-    weight_t: float = 0.0
-    depth_m: float = 0.0
+    height: float = 0.01
+    width: float = 0.01
+    weight: float = 0.01
+    depth: float = 0.01

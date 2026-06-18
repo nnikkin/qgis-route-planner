@@ -1,18 +1,13 @@
 from typing import Protocol
-
+from .profile_dto import ProfileDto
 
 class ProfileProvider(Protocol):
-    def get_profiles(self):
-        pass
+    def get_profiles(self) -> list[ProfileDto]: ...
 
-    def get_profile_by_id(self, current_profile_id):
-        pass
+    def get_profile_by_id(self, profile_id: int) -> ProfileDto | None: ...
 
-    def create_profile(self, name: str, vtype, height: float, width: float, depth: float, weight: float):
-        pass
+    def create_profile(self, name: str, vtype: str, height: float, width: float, depth: float, weight: float) -> ProfileDto: ...
 
-    def update_profile(self, current_profile_id, profile):
-        pass
+    def update_profile(self, profile_id: int, profile: ProfileDto) -> bool: ...
 
-    def delete_profile(self, profile_id):
-        pass
+    def delete_profile(self, profile_id: int) -> bool: ...

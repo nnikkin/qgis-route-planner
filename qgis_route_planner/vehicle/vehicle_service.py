@@ -13,10 +13,10 @@ class VehicleService:
             profile = VehicleProfile(
                 name=name,
                 type=vtype,
-                height_m=height,
-                width_m=width,
-                depth_m=depth,
-                weight_t=weight
+                height=height,
+                width=width,
+                depth=depth,
+                weight=weight
             )
             return self.__vehicle_repo.add_profile(profile)
         except OSError as e:

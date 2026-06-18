@@ -158,6 +158,10 @@ class MainWindowModel(QObject):
         if profile is None:
             return None
         return ActiveProfileDto(
-            id=getattr(profile, "id", None),
-            name=getattr(profile, "name", ""),
+            id=profile.id,
+            name=profile.name,
+            height=profile.height,
+            width=profile.width,
+            weight=profile.weight,
+            type=profile.type
         )

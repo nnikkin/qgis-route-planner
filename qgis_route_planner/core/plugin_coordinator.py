@@ -179,9 +179,6 @@ class PluginCoordinator(QObject):
             self.__vehicle_service,
             self.__weather_service
         )
-        self.__settings_controller.reconnect_requested.connect(self.__on_reconnect_requested)
-        self.__settings_controller.graph_rebuild_requested.connect(self.__on_graph_rebuild_requested)
-        self.__settings_controller.weather_settings_saved.connect(self.__apply_weather_settings)
 
         self.__main_window_controller = MainWindowController(
             model=self.__main_window_model,
@@ -195,6 +192,16 @@ class PluginCoordinator(QObject):
         )
         self.__main_window_controller.active_restriction_nodes_requested.connect(
             self.__provide_active_restriction_ids
+        )
+
+        self.__settings_controller.reconnect_requested.connect(self.__on_reconnect_requested)
+        self.__settings_controller.graph_rebuild_requested.connect(self.__on_graph_rebuild_requested)
+        self.__settings_controller.weather_settings_saved.connect(self.__apply_weather_settings)
+        self.__settings_controller.active_profile_changed.connect(
+            self.__main_window_controller.update_active_profile
+        )
+        self.__settings_controller.select_distance_setting_saved.connect(
+            self.__main_window_controller.set_point_select_distance
         )
 
         self.__restriction_controller = RestrictionDialogController(
@@ -217,13 +224,7 @@ class PluginCoordinator(QObject):
             self.__main_window_controller.on_restriction_display_data_changed
         )
 
-        self.__settings_controller.active_profile_changed.connect(
-            self.__main_window_controller.update_active_profile
-        )
-
-        self.__settings_controller.select_distance_setting_saved.connect(
-            self.__main_window_controller.set_point_select_distance
-        )
+        self.__load_initial_active_profile()
 
     def __init_repositories(self):
         self.__vehicle_repo = VehicleProfileRepository()
@@ -334,6 +335,11 @@ class PluginCoordinator(QObject):
         lon, lat = coords
         self.__weather_service.set_location(lon, lat)
 
+    def __load_initial_active_profile(self):
+        active_id = self.__settings_service.get_active_profile_id()
+        profile = self.__vehicle_service.get_profile_by_id(active_id) if active_id is not None else None
+        self.__main_window_controller.update_active_profile(profile)
+
     def __apply_weather_settings(self, settings: dict):
         if self.__weather_service:
             self.__weather_service.set_api_key(settings.get("api_key", ""))
@@ -368,15 +374,13 @@ class PluginCoordinator(QObject):
             def run_in_background(task: QgsTask):
                 task.setProgress(0)
                 self.__spatial_data_service.run_init_database(selected_layers, column_mapping)
-                task.setProgress(50)
-                self.__restriction_service.run_init_database()
                 task.setProgress(100)
                 return True
 
             def on_finished(exception, result=None):
                 if exception:
                     QMessageBox.critical(iface.mainWindow(), "Ошибка",
-                                         f"Не удалось инициализировать БД:\n{exception}", QMessageBox.Ok)
+                        f"Не удалось инициализировать БД:\n{exception}", QMessageBox.Ok)
                     Logger.error(f"Не удалось инициализировать БД:\n{exception}")
                     if self.__is_reconnecting:
                         self.__reconnect_cancelled()

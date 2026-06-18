@@ -1,4 +1,7 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from qgis_route_planner.vehicle import VehicleProfile, VehicleType
 
 import psycopg.errors
 from psycopg import sql
@@ -8,7 +11,7 @@ from .layer_role import LayerRole
 from .column_role import ColumnRole
 
 from qgis_route_planner.exceptions import NodeNotFoundError, TopologyBuildError
-
+from qgis_route_planner.vehicle import VehicleType
 from qgis_route_planner.core.db_connection import DbConnection
 
 
@@ -22,51 +25,75 @@ class RoadGraphRepository:
         self.__db.execute_nonquery("""
             CREATE TABLE IF NOT EXISTS routing.graph_edges (
                 edge_id BIGINT PRIMARY KEY,
-                source BIGINT REFERENCES routing.graph_nodes(node_id),
-                x1 DOUBLE PRECISION,
-                y1 DOUBLE PRECISION,
-                target BIGINT REFERENCES routing.graph_nodes(node_id),
-                x2 DOUBLE PRECISION,
-                y2 DOUBLE PRECISION,
                 geom GEOMETRY(LineString, 4326),
-                length_m DOUBLE PRECISION,
+                source BIGINT REFERENCES routing.graph_nodes(node_id),
+                source_x DOUBLE PRECISION,
+                source_y DOUBLE PRECISION,
+                target BIGINT REFERENCES routing.graph_nodes(node_id),
+                target_x DOUBLE PRECISION,
+                target_y DOUBLE PRECISION,
                 cost DOUBLE PRECISION,
                 reverse_cost DOUBLE PRECISION,
-                road_class_id SMALLINT REFERENCES routing.road_classes(class_id),
-                name TEXT,
-                is_oneway BOOLEAN,
-                hgv BOOLEAN,
-                max_height FLOAT,
-                max_width_m DOUBLE PRECISION,
-                max_weight_t DOUBLE PRECISION,
-                bridge BOOLEAN DEFAULT FALSE,
-                lanes INTEGER,
-                lanes_forward INTEGER,
-                lanes_backward INTEGER,
-                turn_lanes_backward TEXT,
-                avg_speed_estimated DOUBLE PRECISION,
-                max_speed_practical_kmh DOUBLE PRECISION,
                 point_cost_penalty DOUBLE PRECISION DEFAULT 0.0,
-                max_speed_kmh DOUBLE PRECISION
+                length_m DOUBLE PRECISION
             );
         """)
+
+        self.__db.execute_nonquery("""
+           CREATE TABLE IF NOT EXISTS routing.graph_edge_info
+           (
+               id                      BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+               edge_id                 BIGINT REFERENCES routing.graph_edges (edge_id) ON DELETE CASCADE ON UPDATE CASCADE,
+               road_class_id           SMALLINT REFERENCES routing.road_classes (class_id),
+               name                    TEXT,
+               is_oneway               BOOLEAN,
+               hgv                     BOOLEAN,
+               bridge                  BOOLEAN DEFAULT FALSE,
+               lanes_forward           INTEGER,
+               lanes_backward          INTEGER,
+               max_height              FLOAT,
+               max_width_m             DOUBLE PRECISION,
+               max_weight_t            DOUBLE PRECISION,
+               max_speed_kmh           DOUBLE PRECISION,
+               avg_speed_estimated     DOUBLE PRECISION,
+               max_speed_practical_kmh DOUBLE PRECISION
+           );
+           """)
         self.__ensure_edges_columns()
 
     def __ensure_edges_columns(self):
         for col, typ in [
+            ("geom", "GEOMETRY(LineString, 4326)"),
+            ("target", "BIGINT"),
+            ("source", "BIGINT"),
+            ("target_x", "DOUBLE PRECISION"),
+            ("target_y", "DOUBLE PRECISION"),
+            ("source_x", "DOUBLE PRECISION"),
+            ("source_y", "DOUBLE PRECISION"),
+            ("cost", "DOUBLE PRECISION"),
+            ("reverse_cost", "DOUBLE PRECISION"),
+            ("point_cost_penalty", "DOUBLE PRECISION")
+        ]:
+            try:
+                self.__db.execute_nonquery(
+                    f"ALTER TABLE routing.graph_edges ADD COLUMN IF NOT EXISTS {col} {typ};"
+                )
+            except psycopg.errors.DuplicateColumn:
+                pass
+
+        for col, typ in [
+            ("max_height_m", "DOUBLE PRECISION"),
             ("max_width_m", "DOUBLE PRECISION"),
             ("max_weight_t", "DOUBLE PRECISION"),
             ("bridge", "BOOLEAN DEFAULT FALSE"),
             ("lanes", "INTEGER"),
             ("lanes_forward", "INTEGER"),
             ("lanes_backward", "INTEGER"),
-            ("turn_lanes_backward", "TEXT"),
-            ("max_speed_practical_kmh", "DOUBLE PRECISION"),
-            ("point_cost_penalty", "DOUBLE PRECISION DEFAULT 0.0"),
+            ("max_speed_practical_kmh", "DOUBLE PRECISION")
         ]:
             try:
                 self.__db.execute_nonquery(
-                    f"ALTER TABLE routing.graph_edges ADD COLUMN IF NOT EXISTS {col} {typ};"
+                    f"ALTER TABLE routing.graph_edge_info ADD COLUMN IF NOT EXISTS {col} {typ};"
                 )
             except psycopg.errors.DuplicateColumn:
                 pass
@@ -103,14 +130,14 @@ class RoadGraphRepository:
         """ Заполнение столбцов source и target таблицы routing.graph_edges """
         self.__db.execute_nonquery("""
             UPDATE routing.graph_edges AS e
-            SET source = v.node_id, x1 = v.x, y1 = v.y
+            SET source = v.node_id, source_x = v.x, source_y = v.y
             FROM routing.graph_nodes AS v
             WHERE ST_StartPoint(e.geom) = v.geom;
          """)
 
         self.__db.execute_nonquery("""
             UPDATE routing.graph_edges AS e
-            SET target = v.node_id, x2 = v.x, y2 = v.y
+            SET target = v.node_id, target_x = v.x, target_y = v.y
             FROM routing.graph_nodes AS v
             WHERE ST_EndPoint(e.geom) = v.geom;
         """)
@@ -139,14 +166,16 @@ class RoadGraphRepository:
     def __fill_edges_cost(self):
         """ Заполнение весов в routing.graph_nodes """
         self.__db.execute_nonquery("""
-            UPDATE routing.graph_edges
+            UPDATE routing.graph_edges e
             SET
-                length_m = ST_Length(geom::geography, true),
-                cost = ST_Length(geom::geography, true) / (NULLIF(avg_speed_estimated, 0) / 3.6),
+                length_m = ST_Length(e.geom::geography, true),
+                cost = ST_Length(e.geom::geography, true) / (NULLIF(info.avg_speed_estimated, 0) / 3.6),
                 reverse_cost = CASE
-                    WHEN is_oneway = TRUE THEN -1
-                    ELSE ST_Length(geom::geography, true) / (NULLIF(avg_speed_estimated, 0) / 3.6)
-                END;
+                    WHEN info.is_oneway = TRUE THEN -1
+                    ELSE ST_Length(e.geom::geography, true) / (NULLIF(info.avg_speed_estimated, 0) / 3.6)
+                END
+            FROM routing.graph_edge_info info
+            WHERE e.edge_id = info.edge_id;
         """)
 
     def __create_road_point_events_table(self):
@@ -186,29 +215,13 @@ class RoadGraphRepository:
             );
         """)
 
-    def __create_relation_restrictions_table(self):
-        """
-        Создание таблицы routing.osm_relation_restrictions.
-        Хранит теги restriction и turn_restriction для справки
-        """
-        self.__db.execute_nonquery("""
-            CREATE TABLE IF NOT EXISTS routing.osm_relation_restrictions (
-                relation_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                source_layer TEXT,
-                source_id BIGINT,
-                name TEXT,
-                restriction TEXT,
-                turn_restriction TEXT,
-                tags TEXT
-            );
-        """)
     def __fill_avg_speed(self):
         """ Заполнение средней скорости """
         self.__db.execute_nonquery("""
-            UPDATE routing.graph_edges e
+            UPDATE routing.graph_edge_info info
             SET avg_speed_estimated = CASE
-                WHEN e.max_speed_practical_kmh > 0 THEN e.max_speed_practical_kmh
-                WHEN e.max_speed_kmh > 0 THEN GREATEST(e.max_speed_kmh * 0.55, 10)
+                WHEN info.max_speed_practical_kmh > 0 THEN info.max_speed_practical_kmh
+                WHEN info.max_speed_kmh > 0 THEN GREATEST(info.max_speed_kmh * 0.55, 10)
                 WHEN c.class_name = 'motorway' THEN 80
                 WHEN c.class_name = 'motorway_link' THEN 40
                 WHEN c.class_name = 'trunk' THEN 55
@@ -227,7 +240,7 @@ class RoadGraphRepository:
                 ELSE 20
             END
             FROM routing.road_classes c
-            WHERE e.road_class_id = c.class_id
+            WHERE info.road_class_id = c.class_id
         """)
 
     def __create_indexes(self):
@@ -308,7 +321,6 @@ class RoadGraphRepository:
         self.__create_edges_table()
         self.__create_road_point_events_table()
         self.__create_parking_areas_table()
-        self.__create_relation_restrictions_table()
         self.__insert_edges_from_mapping(layers, column_mapping)
 
         count = self.__db.execute_query("SELECT COUNT(*) FROM routing.graph_nodes;")[0][0]
@@ -319,22 +331,55 @@ class RoadGraphRepository:
         self.create_topology()
         self.enrich_edges_from_points(self.__get_layers_by_role(layers, LayerRole.POINTS), column_mapping)
         self.create_parking_areas(self.__get_layers_by_role(layers, LayerRole.PARKING), column_mapping)
+
+        self.create_restriction_tables()
         self.create_restrictions_from_roads()
         self.create_restrictions_from_pipes(self.__get_layers_by_role(layers, LayerRole.PIPING), column_mapping)
-        self.import_relation_restrictions(self.__get_layers_by_role(layers, LayerRole.FOR_CONTEXT), column_mapping)
+
+    def create_restriction_tables(self):
+        self.__db.execute_nonquery("CREATE SCHEMA IF NOT EXISTS routing")
+
+        # Базовая таблица ограничений (включая простые ограничения 'simple')
+        self.__db.execute_nonquery("""
+            CREATE TABLE IF NOT EXISTS routing.restrictions (
+                restriction_id      BIGINT PRIMARY KEY,
+                node_id             BIGINT,
+                restriction_name    TEXT,
+                user_comment        TEXT DEFAULT ''
+            )
+        """)
+
+        # Таблица ограничений по габаритам
+        self.__db.execute_nonquery("""
+            CREATE TABLE IF NOT EXISTS routing.dimension_restrictions (
+                restriction_id BIGINT PRIMARY KEY REFERENCES routing.restrictions(restriction_id) ON DELETE CASCADE,
+                max_height_m   DOUBLE PRECISION,
+                max_width_m    DOUBLE PRECISION,
+                max_depth_m    DOUBLE PRECISION,
+                max_weight_t   DOUBLE PRECISION
+            )
+        """)
+
+        # Таблица временных ограничений
+        self.__db.execute_nonquery("""
+            CREATE TABLE IF NOT EXISTS routing.temp_restrictions (
+                restriction_id BIGINT PRIMARY KEY REFERENCES routing.restrictions(restriction_id) ON DELETE CASCADE,
+                valid_from     TIMESTAMP,
+                valid_to       TIMESTAMP
+            )
+        """)
 
     def __insert_edges_from_mapping(
             self,
             layers: list[Layer],
             column_mapping: dict[str, dict[ColumnRole, str | None]] | None,
     ):
-        """ Заполнение таблицы graph_edges рёбрами """
+        """ Заполнение таблиц graph_edges и graph_edge_info рёбрами """
         line_table = self.__get_line_table(layers)
         if line_table is None:
             raise TopologyBuildError("Не выбрана таблица с линейной геометрией для построения графа.")
 
-        self.__db.execute_nonquery("TRUNCATE routing.graph_edges CASCADE")
-        self.__db.execute_nonquery("TRUNCATE routing.graph_nodes CASCADE")
+        # Очищаем таблицы с учетом каскадного удаления зависимостей
         self.__db.execute_nonquery("TRUNCATE routing.road_classes CASCADE")
 
         table_mapping = (column_mapping or {}).get(line_table, {})
@@ -346,7 +391,6 @@ class RoadGraphRepository:
         oneway_col = self.__first_existing_column(line_table, ("oneway",))
         bridge_col = self.__first_existing_column(line_table, ("bridge",))
         maxspeed_col = self.__first_existing_column(line_table, ("maxspeed",))
-        lanes_col = self.__first_existing_column(line_table, ("lanes",))
 
         missing_roles = []
         if not edge_id_col:
@@ -379,57 +423,48 @@ class RoadGraphRepository:
         max_width_expr = self.__build_tag_number_expr(other_col, "maxwidth")
         max_weight_expr = self.__build_tag_number_expr(other_col, "maxweight")
         bridge_expr = self.__build_bridge_expr(other_col, bridge_col)
-        lanes_expr = self.__build_tag_int_expr(other_col, "lanes", plain_column=lanes_col)
         lanes_forward_expr = self.__build_tag_int_expr(other_col, "lanes:forward")
         lanes_backward_expr = self.__build_tag_int_expr(other_col, "lanes:backward")
-        turn_lanes_backward_expr = self.__build_tag_text_expr(other_col, "turn:lanes:backward")
 
         query = sql.SQL("""
-            WITH inserted_classes AS (
-                INSERT INTO routing.road_classes (class_name)
-                SELECT DISTINCT {highway_expr}
-                FROM {line_table} AS l
-                WHERE {highway_expr} IN (
-                    'primary', 'secondary', 'tertiary', 'motorway',
-                    'primary_link', 'trunk', 'secondary_link', 'tertiary_link',
-                    'motorway_link', 'trunk_link', 'service', 'road', 'unclassified',
-                    'residential', 'living_street'
+                WITH
+                    inserted_classes AS (
+                        INSERT INTO routing.road_classes (class_name)
+                            SELECT DISTINCT {highway_expr}
+                            FROM {line_table} AS l
+                            WHERE {highway_expr} IN (
+                                'primary', 'secondary', 'tertiary', 'motorway',
+                                'primary_link', 'trunk', 'secondary_link', 'tertiary_link',
+                                'motorway_link', 'trunk_link', 'service', 'road', 'unclassified',
+                                'residential', 'living_street'
+                            )
+                        ON CONFLICT (class_name) DO NOTHING
+                        RETURNING class_id, class_name
+                    ),
+                    all_classes AS (SELECT class_id, class_name
+                        FROM inserted_classes
+                            UNION SELECT class_id, class_name FROM routing.road_classes
+                    ),
+                    inserted_edges AS (
+                        INSERT INTO routing.graph_edges (edge_id, geom)
+                            SELECT DISTINCT {edge_id_expr}, {geom_expr}
+                            FROM {line_table} AS l
+                        INNER JOIN all_classes ac ON {highway_expr} = ac.class_name
+                        ON CONFLICT (edge_id) DO NOTHING
+                        RETURNING edge_id
                 )
-                ON CONFLICT (class_name) DO NOTHING
-                RETURNING class_id, class_name
-            ),
-            all_classes AS (
-                SELECT class_id, class_name FROM inserted_classes
-                UNION
-                SELECT class_id, class_name FROM routing.road_classes
-            )
-            INSERT INTO routing.graph_edges (
-                edge_id, geom, road_class_id, name, is_oneway,
-                max_speed_kmh, max_speed_practical_kmh, max_height,
-                max_width_m, max_weight_t, bridge, lanes, lanes_forward,
-                lanes_backward, turn_lanes_backward, hgv
-            )
-            SELECT
-                {edge_id_expr},
-                {geom_expr},
-                ac.class_id,
-                {name_expr},
-                {is_oneway_expr},
-                {max_speed_expr},
-                {max_speed_practical_expr},
-                {max_height_expr},
-                {max_width_expr},
-                {max_weight_expr},
-                {bridge_expr},
-                {lanes_expr},
-                {lanes_forward_expr},
-                {lanes_backward_expr},
-                {turn_lanes_backward_expr},
-                {hgv_expr}
-            FROM {line_table} AS l
-            INNER JOIN all_classes ac ON {highway_expr} = ac.class_name
-            ON CONFLICT (edge_id) DO NOTHING;
-        """).format(
+                INSERT INTO routing.graph_edge_info (edge_id, road_class_id, name, is_oneway, hgv, bridge,
+                    lanes_forward, lanes_backward, max_height, max_width_m,
+                        max_weight_t, max_speed_kmh, max_speed_practical_kmh)
+                    SELECT {edge_id_expr}, ac.class_id, {name_expr},
+                    {is_oneway_expr}, {hgv_expr}, {bridge_expr},
+                    {lanes_forward_expr}, {lanes_backward_expr}, {max_height_expr},
+                    {max_width_expr}, {max_weight_expr}, {max_speed_expr}, {max_speed_practical_expr}
+                FROM {line_table} AS l
+                    INNER JOIN all_classes ac
+                ON {highway_expr} = ac.class_name
+                    INNER JOIN inserted_edges ie ON {edge_id_expr} = ie.edge_id;
+            """).format(
             edge_id_expr=edge_id_expr,
             geom_expr=geom_expr,
             highway_expr=highway_expr,
@@ -441,10 +476,8 @@ class RoadGraphRepository:
             max_width_expr=max_width_expr,
             max_weight_expr=max_weight_expr,
             bridge_expr=bridge_expr,
-            lanes_expr=lanes_expr,
             lanes_forward_expr=lanes_forward_expr,
             lanes_backward_expr=lanes_backward_expr,
-            turn_lanes_backward_expr=turn_lanes_backward_expr,
             hgv_expr=hgv_expr,
             line_table=qualified_table
         )
@@ -457,8 +490,8 @@ class RoadGraphRepository:
             column_mapping: dict[str, dict[ColumnRole, str | None]] | None = None,
     ):
         """
-        Импортирует выбранные точечные объекты как дорожные события и применяет
-        штрафы к ближайшим рёбрам без создания новых узлов маршрутизации.
+            Импортирует выбранные точечные объекты как дорожные события и применяет
+            штрафы к ближайшим рёбрам без создания новых узлов маршрутизации.
         """
         if not point_layers:
             return
@@ -483,11 +516,9 @@ class RoadGraphRepository:
             other_id = sql.Identifier(other_col)
 
             insert_query = sql.SQL("""
-                INSERT INTO routing.road_point_events (
-                    source_layer, source_id, nearest_edge_id, nearest_node_id,
-                    geom, event_type, max_speed_kmh, access, motorcar,
-                    traffic_calming, crossing, traffic_signal, tags, cost_penalty
-                )
+                INSERT INTO routing.road_point_events (source_layer, source_id, nearest_edge_id, nearest_node_id,
+                                                      geom, event_type, max_speed_kmh, access, motorcar,
+                                                      traffic_calming, crossing, traffic_signal, tags, cost_penalty)
                 SELECT
                     {layer_name},
                     {source_id_expr},
@@ -555,61 +586,63 @@ class RoadGraphRepository:
 
             self.__db.execute_nonquery(insert_query)
 
+        # Обновляем свойства скоростей в таблице graph_edge_info
         self.__db.execute_nonquery("""
-            WITH speed_events AS (
-                SELECT nearest_edge_id AS edge_id, MIN(max_speed_kmh) AS max_speed_kmh
-                FROM routing.road_point_events
-                WHERE nearest_edge_id IS NOT NULL
-                  AND max_speed_kmh IS NOT NULL
-                  AND max_speed_kmh > 0
-                GROUP BY nearest_edge_id
-            )
-            UPDATE routing.graph_edges e
-            SET
-                max_speed_kmh = LEAST(COALESCE(e.max_speed_kmh, s.max_speed_kmh), s.max_speed_kmh),
+            WITH speed_events
+                AS (SELECT nearest_edge_id AS edge_id, MIN(max_speed_kmh) AS max_speed_kmh
+                    FROM routing.road_point_events
+                    WHERE nearest_edge_id IS NOT NULL
+                      AND max_speed_kmh IS NOT NULL
+                      AND max_speed_kmh > 0
+                    GROUP BY nearest_edge_id)
+            UPDATE routing.graph_edge_info info
+            SET max_speed_kmh = LEAST(COALESCE(info.max_speed_kmh, s.max_speed_kmh), s.max_speed_kmh),
                 avg_speed_estimated = LEAST(
-                    COALESCE(e.avg_speed_estimated, GREATEST(s.max_speed_kmh * 0.55, 10)),
+                    COALESCE(info.avg_speed_estimated, GREATEST(s.max_speed_kmh * 0.55, 10)),
                     GREATEST(s.max_speed_kmh * 0.55, 10)
-                ),
-                cost = e.length_m / (NULLIF(LEAST(
-                    COALESCE(e.avg_speed_estimated, GREATEST(s.max_speed_kmh * 0.55, 10)),
-                    GREATEST(s.max_speed_kmh * 0.55, 10)
-                ), 0) / 3.6),
+                )
+            FROM speed_events s
+            WHERE info.edge_id = s.edge_id;
+            """)
+
+        # Пересчитываем веса  в базовой таблице graph_edges
+        self.__db.execute_nonquery("""
+            UPDATE routing.graph_edges e
+            SET cost = e.length_m / (NULLIF(info.avg_speed_estimated, 0) / 3.6),
                 reverse_cost = CASE
                     WHEN e.reverse_cost < 0 THEN e.reverse_cost
-                    ELSE e.length_m / (NULLIF(LEAST(
-                        COALESCE(e.avg_speed_estimated, GREATEST(s.max_speed_kmh * 0.55, 10)),
-                        GREATEST(s.max_speed_kmh * 0.55, 10)
-                    ), 0) / 3.6)
+                    ELSE e.length_m / (NULLIF(info.avg_speed_estimated, 0) / 3.6)
                 END
-            FROM speed_events s
-            WHERE e.edge_id = s.edge_id;
+            FROM routing.graph_edge_info info
+            WHERE e.edge_id = info.edge_id
+             AND info.edge_id IN (SELECT nearest_edge_id
+                                  FROM routing.road_point_events
+                                  WHERE nearest_edge_id IS NOT NULL);
         """)
+
+        # Наложение штрафов времени на ребра
         self.__db.execute_nonquery("""
             WITH penalties AS (
-                SELECT
-                    nearest_edge_id AS edge_id,
-                    MIN(cost_penalty) FILTER (WHERE cost_penalty < 0) AS blocking_penalty,
-                    SUM(cost_penalty) FILTER (WHERE cost_penalty > 0) AS positive_penalty
-                FROM routing.road_point_events
-                WHERE nearest_edge_id IS NOT NULL
-                GROUP BY nearest_edge_id
+                SELECT nearest_edge_id AS edge_id,
+                MIN(cost_penalty) FILTER (WHERE cost_penalty < 0) AS blocking_penalty,
+                SUM(cost_penalty) FILTER (WHERE cost_penalty > 0) AS positive_penalty
+                    FROM routing.road_point_events
+                    WHERE nearest_edge_id IS NOT NULL
+                    GROUP BY nearest_edge_id
             )
             UPDATE routing.graph_edges e
-            SET
-                point_cost_penalty = COALESCE(p.blocking_penalty, p.positive_penalty, 0),
-                cost = CASE
-                    WHEN COALESCE(p.blocking_penalty, 0) < 0 THEN -1
-                    ELSE cost + COALESCE(p.positive_penalty, 0)
-                END,
-                reverse_cost = CASE
-                    WHEN reverse_cost < 0 THEN reverse_cost
-                    WHEN COALESCE(p.blocking_penalty, 0) < 0 THEN -1
-                    ELSE reverse_cost + COALESCE(p.positive_penalty, 0)
-                END
+            SET point_cost_penalty = COALESCE(p.blocking_penalty, p.positive_penalty, 0),
+            cost = CASE
+                WHEN COALESCE(p.blocking_penalty, 0) < 0 THEN -1
+                ELSE cost + COALESCE(p.positive_penalty, 0)
+            END,
+            reverse_cost = CASE
+                WHEN reverse_cost < 0 THEN reverse_cost
+                WHEN COALESCE(p.blocking_penalty, 0) < 0 THEN -1
+                ELSE reverse_cost + COALESCE(p.positive_penalty, 0)
+            END
             FROM penalties p
-            WHERE e.edge_id = p.edge_id
-              AND COALESCE(p.blocking_penalty, p.positive_penalty, 0) != 0;
+            WHERE e.edge_id = p.edge_id AND COALESCE(p.blocking_penalty, p.positive_penalty, 0) != 0;
         """)
 
     def create_restrictions_from_pipes(
@@ -617,7 +650,7 @@ class RoadGraphRepository:
             pipe_layers: list[Layer],
             column_mapping: dict[str, dict[ColumnRole, str | None]] | None = None,
     ):
-        """ Создаёт габаритные ограничения из надземных трубопроводов. """
+        """ Создаёт габаритные ограничения из надземных трубопроводов """
         if not pipe_layers:
             return
 
@@ -650,58 +683,46 @@ class RoadGraphRepository:
             comment_value = f"auto:piping;source_layer={layer.name}"
 
             insert_query = sql.SQL("""
-                INSERT INTO routing.restrictions (
-                    restriction_id,
-                    restriction_type_id,
-                    name,
-                    node_id,
-                    value_num,
-                    value_text,
-                    comment,
-                    max_height_m,
-                    max_width_m,
-                    max_weight_t
+                WITH raw_data AS (
+                    SELECT
+                        {name_expr} AS name,
+                        n.node_id,
+                        pipe_data.max_height
+                    FROM {pipe_table} p
+                    CROSS JOIN LATERAL (SELECT {maxheight_expr} AS max_height) pipe_data
+                    JOIN routing.graph_edges e
+                        ON ST_Intersects(ST_Transform(p.{geom_col}, 4326), e.geom)
+                    JOIN routing.graph_nodes n ON n.node_id IN (e.source, e.target)
+                        AND ST_DWithin(n.geom::geography, ST_ClosestPoint(e.geom, ST_Transform(p.{geom_col}, 4326))::geography, 50)
+                    WHERE {pipeline_condition}
+                    AND {overground_condition}
+                    AND pipe_data.max_height > 0
+                    AND NOT EXISTS (
+                        SELECT 1 FROM routing.restrictions ex
+                        WHERE ex.node_id = n.node_id
+                        AND ex.user_comment = {comment_value}
+                        )
+                ),
+                ins_base AS (
+                    INSERT INTO routing.restrictions (restriction_id, name, node_id, comment)
+                        SELECT (
+                            SELECT COALESCE(MAX(restriction_id), 0)
+                            FROM routing.restrictions
+                        ) + ROW_NUMBER() OVER (ORDER BY node_id) AS restriction_id,
+                            name,
+                            node_id,
+                            {comment_value} AS comment
+                        FROM raw_data
+                        ON CONFLICT DO NOTHING
+                        RETURNING restriction_id, node_id
                 )
-                SELECT
-                    COALESCE(r.max_id, 0) + ROW_NUMBER() OVER (ORDER BY n.node_id) AS restriction_id,
-                    2 AS restriction_type_id,
-                    {name_expr} AS name,
-                    n.node_id,
-                    pipe_data.max_height,
-                    '' AS value_text,
-                    {comment_value} AS comment,
-                    pipe_data.max_height,
+                INSERT INTO routing.dimension_restrictions (restriction_id, max_height_m, max_width_m, max_weight_t)
+                SELECT ib.restriction_id,
+                    rd.max_height,
                     NULL::double precision,
                     NULL::double precision
-                FROM {pipe_table} p
-                CROSS JOIN LATERAL (
-                    SELECT {maxheight_expr} AS max_height
-                ) pipe_data
-                JOIN routing.graph_edges e
-                    ON ST_Intersects(
-                        ST_Transform(p.{geom_col}, 4326),
-                        e.geom
-                    )
-                JOIN routing.graph_nodes n
-                    ON n.node_id IN (e.source, e.target)
-                    AND ST_DWithin(
-                        n.geom::geography,
-                        ST_ClosestPoint(
-                            e.geom,
-                            ST_Transform(p.{geom_col}, 4326)
-                        )::geography,
-                        50
-                    )
-                CROSS JOIN (SELECT COALESCE(MAX(restriction_id), 0) AS max_id FROM routing.restrictions) r
-                WHERE {pipeline_condition}
-                  AND {overground_condition}
-                  AND pipe_data.max_height > 0
-                  AND NOT EXISTS (
-                    SELECT 1 FROM routing.restrictions ex
-                    WHERE ex.node_id = n.node_id
-                      AND ex.comment = {comment_value}
-                )
-                ON CONFLICT DO NOTHING;
+                FROM ins_base ib
+                    INNER JOIN raw_data rd ON ib.node_id = rd.node_id;
             """).format(
                 name_expr=name_expr,
                 geom_col=geom_id,
@@ -752,8 +773,7 @@ class RoadGraphRepository:
                     {name_expr},
                     ST_Multi(ST_Transform(p.{geom_col}, 4326))::geometry(MultiPolygon, 4326)
                 FROM {parking_table} p
-                WHERE p.{geom_col} IS NOT NULL
-                  AND {amenity_condition};
+                WHERE p.{geom_col} IS NOT NULL AND {amenity_condition};
             """).format(
                 layer_name=sql.Literal(layer.name),
                 source_id_expr=source_id_expr,
@@ -768,142 +788,73 @@ class RoadGraphRepository:
     def create_restrictions_from_roads(self):
         """ Создаёт габаритные ограничения из тегов дорожного слоя """
         self.__db.execute_nonquery("""
+        WITH raw_roads AS (SELECT e.edge_id,
+            COALESCE(e.target, e.source) AS node_id,
+            COALESCE(info.name, 'Ограничение на дороге ' || e.edge_id::text) AS name,
+            'auto:road_tags;edge_id=' || e.edge_id::text ||
+            CASE
+                WHEN info.bridge THEN ';bridge=yes'
+                ELSE ''
+            END AS comment,
+            NULLIF(info.max_height, 0) AS max_height_m,
+            NULLIF(info.max_width_m, 0) AS max_width_m,
+            NULLIF(info.max_weight_t, 0) AS max_weight_t
+        FROM routing.graph_edges e
+        INNER JOIN routing.graph_edge_info info ON e.edge_id = info.edge_id
+        WHERE COALESCE(e.target, e.source) IS NOT NULL
+        AND (
+            COALESCE(info.max_height, 0) > 0
+            OR COALESCE(info.max_width_m, 0) > 0
+            OR COALESCE(info.max_weight_t, 0) > 0
+        )
+        AND NOT EXISTS (
+            SELECT 1
+            FROM routing.restrictions existing
+            WHERE existing.user_comment LIKE
+                'auto:road_tags;edge_id=' ||
+                e.edge_id::text || '%%')
+        ),
+        ins_base AS (
             INSERT INTO routing.restrictions (
                 restriction_id,
-                restriction_type_id,
+                restriction_name,
+                node_id,
+                user_comment
+            )
+            SELECT (
+                SELECT COALESCE(MAX(restriction_id), 0)
+                FROM routing.restrictions
+            ) +
+                ROW_NUMBER() OVER (ORDER BY edge_id) AS restriction_id,
                 name,
                 node_id,
-                value_num,
-                value_text,
-                comment,
+                comment
+            FROM raw_roads
+            ON CONFLICT DO NOTHING
+            RETURNING restriction_id, user_comment)
+            INSERT
+            INTO routing.dimension_restrictions (
+                restriction_id,
                 max_height_m,
                 max_width_m,
                 max_weight_t
             )
             SELECT
-                COALESCE(r.max_id, 0) + ROW_NUMBER() OVER (ORDER BY e.edge_id) AS restriction_id,
-                2 AS restriction_type_id,
-                COALESCE(e.name, 'Ограничение на дороге ' || e.edge_id::text) AS name,
-                COALESCE(e.target, e.source) AS node_id,
-                COALESCE(NULLIF(e.max_height, 0), NULLIF(e.max_width_m, 0), NULLIF(e.max_weight_t, 0)) AS value_num,
-                '' AS value_text,
-                'auto:road_tags;edge_id=' || e.edge_id::text ||
-                CASE WHEN e.bridge THEN ';bridge=yes' ELSE '' END AS comment,
-                NULLIF(e.max_height, 0) AS max_height_m,
-                NULLIF(e.max_width_m, 0) AS max_width_m,
-                NULLIF(e.max_weight_t, 0) AS max_weight_t
-            FROM routing.graph_edges e
-            CROSS JOIN (SELECT COALESCE(MAX(restriction_id), 0) AS max_id FROM routing.restrictions) r
-            WHERE COALESCE(e.target, e.source) IS NOT NULL
-              AND (
-                  COALESCE(e.max_height, 0) > 0
-                  OR COALESCE(e.max_width_m, 0) > 0
-                  OR COALESCE(e.max_weight_t, 0) > 0
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM routing.restrictions existing
-                  WHERE existing.comment LIKE 'auto:road_tags;edge_id=' || e.edge_id::text || '%%'
-              )
-            ON CONFLICT DO NOTHING;
-        """)
+                ib.restriction_id,
+                rr.max_height_m,
+                rr.max_width_m,
+                rr.max_weight_t
+            FROM ins_base ib
+            INNER JOIN raw_roads rr ON ib.user_comment = rr.comment;
+           """)
 
-    def import_relation_restrictions(
-            self,
-            relation_layers: list[Layer],
-            column_mapping: dict[str, dict[ColumnRole, str | None]] | None = None,
-    ):
-        """
-        Сохраняет relation-теги restriction/turn_restriction для просмотра.
-        Для применения к маршруту нужны relation members from/via/to, поэтому
-        здесь намеренно нет изменения стоимости рёбер
-        """
-        relation_sources = [
-            {
-                "name": layer.name,
-                "mapping": (column_mapping or {}).get(layer.name, {}),
-            }
-            for layer in relation_layers
-        ]
-        auto_relation_table = self.__find_table("other_relations")
-        if auto_relation_table and all(source["name"] != auto_relation_table for source in relation_sources):
-            relation_sources.append({"name": auto_relation_table, "mapping": {}})
-
-        if not relation_sources:
-            return
-
-        self.__db.execute_nonquery("TRUNCATE routing.osm_relation_restrictions RESTART IDENTITY")
-
-        for source in relation_sources:
-            table_name = source["name"]
-            table_mapping = source["mapping"]
-            id_col = table_mapping.get(ColumnRole.PRIMARY_KEY) or self.__first_existing_column(
-                table_name,
-                ("osm_id", "id", "relation_id"),
-            )
-            name_col = table_mapping.get(ColumnRole.NAME) or self.__existing_column(table_name, "name")
-            other_col = table_mapping.get(ColumnRole.OTHER) or self.__first_existing_column(
-                table_name,
-                ("other_tags", "tags"),
-            )
-            restriction_col = self.__existing_column(table_name, "restriction")
-            turn_restriction_col = self.__existing_column(table_name, "turn_restriction")
-
-            if not other_col and not restriction_col and not turn_restriction_col:
-                continue
-
-            source_id_expr = (
-                sql.SQL("r.{}::bigint").format(sql.Identifier(id_col))
-                if id_col else sql.SQL("NULL::bigint")
-            )
-            name_expr = (
-                sql.SQL("r.{}").format(sql.Identifier(name_col))
-                if name_col else sql.SQL("NULL::text")
-            )
-            restriction_expr = self.__tag_text_select_expr("r", restriction_col, other_col, "restriction")
-            turn_restriction_expr = self.__tag_text_select_expr(
-                "r",
-                turn_restriction_col,
-                other_col,
-                "turn_restriction",
-            )
-            tags_expr = (
-                sql.SQL("r.{}::text").format(sql.Identifier(other_col))
-                if other_col else sql.SQL("NULL::text")
-            )
-
-            query = sql.SQL("""
-                INSERT INTO routing.osm_relation_restrictions (
-                    source_layer, source_id, name, restriction, turn_restriction, tags
-                )
-                SELECT
-                    {layer_name},
-                    {source_id_expr},
-                    {name_expr},
-                    {restriction_expr},
-                    {turn_restriction_expr},
-                    {tags_expr}
-                FROM {relation_table} r
-                WHERE {restriction_expr} IS NOT NULL
-                   OR {turn_restriction_expr} IS NOT NULL;
-            """).format(
-                layer_name=sql.Literal(table_name),
-                source_id_expr=source_id_expr,
-                name_expr=name_expr,
-                restriction_expr=restriction_expr,
-                turn_restriction_expr=turn_restriction_expr,
-                tags_expr=tags_expr,
-                relation_table=self.__qualified_table(table_name),
-            )
-
-            self.__db.execute_nonquery(query)
-
-    def __pgr_ksp(self, start_id, end_id, k, profile_details, route_points=None, restriction_nodes=None, route_speed_kmh=None):
+    def __pgr_ksp(self, start_id, end_id, k, profile: VehicleProfile, route_points=None, restriction_nodes=None,
+                  route_speed_kmh=None):
         """ Используемый алгоритм поиска n маршрутов. """
-        sql_edges_query = self.__routing_edges_sql(profile_details, restriction_nodes, route_speed_kmh)
+        sql_edges_query = self.__routing_edges_sql(profile, restriction_nodes, route_speed_kmh)
         sql_points_query = self.__routing_points_sql(route_points)
         travel_time = self.__travel_time_sql(route_speed_kmh)
 
-        # one to one: pgr_withPointsKSP( Edges SQL , Points SQL , start vid , end vid , K , driving_side , [ options ])
         if sql_points_query is None:
             query = f"""
                         SELECT
@@ -916,10 +867,11 @@ class RoadGraphRepository:
                             %s,
                             r.agg_cost,
                             e.length_m,
-                            e.name,
+                            info.name,
                             r.node
                         FROM pgr_ksp(%s::text, %s::bigint, %s::bigint, %s::integer, directed := true) AS r
                         JOIN routing.graph_edges AS e ON r.edge = e.edge_id
+                        LEFT JOIN routing.graph_edge_info AS info ON e.edge_id = info.edge_id
                         ORDER BY r.path_id, r.seq
                     """
             return self.__db.execute_query(query, travel_time, sql_edges_query, start_id, end_id, k)
@@ -935,7 +887,7 @@ class RoadGraphRepository:
                 %s,
                 r.agg_cost,
                 e.length_m,
-                e.name,
+                info.name,
                 r.node
             FROM pgr_withPointsKSP(
                 %s::text,
@@ -947,6 +899,7 @@ class RoadGraphRepository:
                 directed := true
             ) AS r
             JOIN routing.graph_edges AS e ON r.edge = e.edge_id
+            LEFT JOIN routing.graph_edge_info AS info ON e.edge_id = info.edge_id
             ORDER BY r.path_id, r.seq
             """
         return self.__db.execute_query(query, travel_time, sql_edges_query, sql_points_query, start_id, end_id, k)
@@ -955,7 +908,7 @@ class RoadGraphRepository:
             self,
             start_id: int,
             end_id: int,
-            profile_details: dict[str, float],
+            profile_id: int,
             waypoint_ids: list[int] = None,
             route_points: list = None,
             restriction_nodes: list[int] = None,
@@ -967,9 +920,8 @@ class RoadGraphRepository:
 
         if not self.__check_point(end_id):
             raise NodeNotFoundError(f"Конечный узел {end_id} не найден в БД!")
-
         if not waypoint_ids:
-            rows = self.__pgr_ksp(start_id, end_id, routes_n, profile_details, route_points, restriction_nodes, route_speed_kmh)
+            rows = self.__pgr_ksp(start_id, end_id, routes_n, profile_id, route_points, restriction_nodes, route_speed_kmh)
             routes = {}
             for row in rows:
                 path_id = row[0]
@@ -992,7 +944,7 @@ class RoadGraphRepository:
             for i in range(len(route_point_ids) - 1):
                 seg_start, seg_end = route_point_ids[i], route_point_ids[i + 1]
                 seg_rows = self.__pgr_ksp(
-                    seg_start, seg_end, routes_n, profile, route_points, restriction_nodes, route_speed_kmh
+                    seg_start, seg_end, routes_n, profile_id, route_points, restriction_nodes, route_speed_kmh
                 )
 
                 # Группируем ребра по path_id внутри текущего сегмента
@@ -1071,7 +1023,7 @@ class RoadGraphRepository:
 
     def __routing_edges_sql(
             self,
-            profile_details: dict[str, float],
+            profile: VehicleProfile,
             restriction_nodes: list = None,
             route_speed_kmh: float | None = None,
     ) -> str:
@@ -1079,31 +1031,33 @@ class RoadGraphRepository:
         if restriction_nodes:
             ids = ",".join(map(str, restriction_nodes))
             restriction_condition = f"""
-            AND source NOT IN ({ids})
-            AND target NOT IN ({ids})
+            AND e.source NOT IN ({ids})
+            AND e.target NOT IN ({ids})
             """
 
-        cost_expr = self.__route_cost_expr("cost", route_speed_kmh)
-        reverse_cost_expr = self.__route_cost_expr("reverse_cost", route_speed_kmh)
+        cost_expr = self.__route_cost_expr("e.cost", route_speed_kmh)
+        reverse_cost_expr = self.__route_cost_expr("e.reverse_cost", route_speed_kmh)
+
         return f"""
-            SELECT edge_id as id, source, target,
-               CASE
-                   WHEN max_height IS NOT NULL AND max_height < {profile_details['height']} THEN -1
-                   WHEN max_width_m IS NOT NULL AND max_width_m > 0 AND max_width_m < {profile_details['width']} THEN -1
-                   WHEN max_weight_t IS NOT NULL AND max_weight_t > 0 AND max_weight_t < {profile_details['weight']} THEN -1
-                   ELSE {cost_expr}
-               END as cost,
-               CASE
-                   WHEN max_height IS NOT NULL AND max_height < {profile_details['height']} THEN -1
-                   WHEN max_width_m IS NOT NULL AND max_width_m > 0 AND max_width_m < {profile_details['width']} THEN -1
-                   WHEN max_weight_t IS NOT NULL AND max_weight_t > 0 AND max_weight_t < {profile_details['weight']} THEN -1
-                   WHEN is_oneway = TRUE THEN -1
-                   ELSE {reverse_cost_expr}
-               END as reverse_cost
-        FROM routing.graph_edges
-        {"WHERE hgv IS NOT FALSE" if profile['type'].lower() == 'truck' else "WHERE 1=1"}
-        {restriction_condition}
-    """
+            SELECT e.edge_id as id, e.source, e.target,
+            CASE
+                WHEN info.max_height IS NOT NULL AND info.max_height < {profile.height} THEN -1
+                WHEN info.max_width_m IS NOT NULL AND info.max_width_m > 0 AND info.max_width_m < {profile.width} THEN -1
+                WHEN info.max_weight_t IS NOT NULL AND info.max_weight_t > 0 AND info.max_weight_t < {profile.weight} THEN -1
+                ELSE {cost_expr}
+            END as cost,
+            CASE
+                WHEN info.max_height IS NOT NULL AND info.max_height < {profile.height} THEN -1
+                WHEN info.max_width_m IS NOT NULL AND info.max_width_m > 0 AND info.max_width_m < {profile.width} THEN -1
+                WHEN info.max_weight_t IS NOT NULL AND info.max_weight_t > 0 AND info.max_weight_t < {profile.weight} THEN -1
+                WHEN info.is_oneway = TRUE THEN -1
+                ELSE {reverse_cost_expr}
+            END as reverse_cost
+            FROM routing.graph_edges e
+            INNER JOIN routing.graph_edge_info info ON e.edge_id = info.edge_id
+                {"WHERE info.hgv IS NOT FALSE" if profile.type == VehicleType.TRUCK else "WHERE 1=1"}
+                {restriction_condition}
+        """
 
     def __routing_points_sql(self, route_points):
         if not route_points:
@@ -1134,26 +1088,6 @@ class RoadGraphRepository:
             point_id
         )
         return bool(result)
-
-    '''
-    def find_nearest_node(self, x: float, y: float, max_distance_m: float = 10.0) -> tuple | None:
-        result = self.__db.execute_query("""
-            SELECT node_id,
-                   ST_Distance(
-                       geom::geography,
-                       ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography
-                   ) as distance
-            FROM routing.graph_nodes
-            WHERE ST_DWithin(
-                geom::geography,
-                ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography,
-                %s
-            )
-            ORDER BY distance
-            LIMIT 1
-        """, x, y, x, y, max_distance_m)
-        return result[0] if result else None
-    '''
 
     def find_nearest_edge(self, x: float, y: float, max_distance_m: float = 50.0) -> dict | None:
         result = self.__db.execute_query("""

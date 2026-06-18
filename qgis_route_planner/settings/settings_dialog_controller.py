@@ -1,17 +1,16 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-
-from qgis_route_planner.settings.profile_provider import ProfileProvider
-from qgis_route_planner.settings.weather_provider import WeatherSettingsProvider
-
 if TYPE_CHECKING:
     from .settings_model import SettingsModel
     from .settings_service import SettingsService
-    from qgis_route_planner.vehicle.vehicle_type import VehicleType
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject
 
 from qgis_route_planner.presentation import FormMode
+
+from .profile_provider import ProfileProvider
+from .weather_provider import WeatherSettingsProvider
+from .profile_dto import ProfileDto
 
 
 class SettingsDialogController(QObject):
@@ -19,15 +18,11 @@ class SettingsDialogController(QObject):
 
     open_page_requested = pyqtSignal(int)
     request_delete_confirmation = pyqtSignal(str)
-
     reconnect_requested = pyqtSignal()
     graph_rebuild_requested = pyqtSignal()
     weather_settings_saved = pyqtSignal(dict)
-
     select_distance_setting_saved = pyqtSignal(float)
-
     active_profile_changed = pyqtSignal(object)
-
     show_error = pyqtSignal(str)
     show_warning = pyqtSignal(str)
     show_info = pyqtSignal(str)
@@ -60,7 +55,7 @@ class SettingsDialogController(QObject):
         self.__load_profiles()
         self.__load_graph_settings()
         self.__load_weather_settings()
-        self.__model.current_profile_id = None
+        self.__model.selected_profile_id = None
         self.__model.current_profile_data = None
         self.__model.editing_mode = FormMode.EMPTY
 
@@ -77,9 +72,9 @@ class SettingsDialogController(QObject):
         try:
             self.__model.profiles = self.__profile_provider.get_profiles()
             self.__model.active_profile_id = self.__service.get_active_profile_id()
-            self.__model.current_profile_id = self.__model.active_profile_id
-            self.__load_current_profile_data()
-            self.__model.editing_mode = FormMode.VIEW if self.__model.current_profile_id else FormMode.EMPTY
+            self.__model.selected_profile_id = self.__model.active_profile_id
+            self.__load_selected_profile_data()
+            self.__model.editing_mode = FormMode.VIEW if self.__model.selected_profile_id else FormMode.EMPTY
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профилей ТС: {e}")
 
@@ -158,34 +153,33 @@ class SettingsDialogController(QObject):
     @pyqtSlot()
     def start_profile_create(self):
         """ Начать создание нового профиля """
-        self.__model.current_profile_id = None
-        self.__load_current_profile_data()
+        self.__model.selected_profile_id = None
         self.__model.editing_mode = FormMode.CREATE
 
     @pyqtSlot()
     def start_profile_edit(self):
         """ Начать редактирование текущего профиля """
-        if self.__model.current_profile_id is None:
+        if self.__model.selected_profile_id is None:
             return
         self.__model.editing_mode = FormMode.EDIT
 
     @pyqtSlot()
     def cancel_profile_edit(self):
         """ Отменить редактирование профиля """
-        if self.__model.current_profile_id is None:
+        if self.__model.selected_profile_id is None:
             self.__model.editing_mode = FormMode.EMPTY
             return
 
-        self.__load_current_profile_data()
+        self.__load_selected_profile_data()
         self.__model.editing_mode = FormMode.VIEW
 
-    def __load_current_profile_data(self):
+    def __load_selected_profile_data(self):
         """ Загрузить данные текущего профиля в модель """
-        if self.__model.current_profile_id is None:
+        if self.__model.selected_profile_id is None:
             self.__model.current_profile_data = None
             return
         try:
-            profile = self.__profile_provider.get_profile_by_id(self.__model.current_profile_id)
+            profile = self.__profile_provider.get_profile_by_id(self.__model.selected_profile_id)
             self.__model.current_profile_data = profile
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки профиля: {e}")
@@ -194,52 +188,45 @@ class SettingsDialogController(QObject):
     @pyqtSlot(int)
     def select_profile(self, profile_id: int):
         """ Выбрать профиль для просмотра/редактирования """
-        self.__model.current_profile_id = profile_id
+        self.__model.selected_profile_id = profile_id
 
         if profile_id is None:
             self.__model.current_profile_data = None
             self.__model.editing_mode = FormMode.EMPTY
             return
-        self.__load_current_profile_data()
+        self.__load_selected_profile_data()
         self.__model.editing_mode = FormMode.VIEW
 
-    @pyqtSlot(str, object, float, float, float, float)
-    def save_profile(self, name: str, vehicle_type: VehicleType, height: float, width: float, depth: float,
-                     weight: float):
-        """ Сохранить профиль """
+    def save_profile(self, name, vehicle_type, height, width, depth, weight):
         mode = self.__model.editing_mode
         if not (mode == FormMode.EDIT or mode == FormMode.CREATE):
             return
-
         if not name or not name.strip():
             self.show_warning.emit("Введите название профиля.")
             return
 
         try:
-            profile = self.__profile_provider.create_profile(
-                name=name.strip(),
-                vtype=vehicle_type,
-                height=height,
-                width=width,
-                depth=depth,
-                weight=weight,
-            )
-            self.__model.current_profile_id = profile.id
-
-            if mode == FormMode.EDIT:
-                self.__profile_provider.update_profile(self.__model.current_profile_id, profile)
+            if mode == FormMode.CREATE:
+                profile = self.__profile_provider.create_profile(
+                    name.strip(), vehicle_type.name, height, width, depth, weight,
+                )
+                self.__model.selected_profile_id = profile.id
+            else:
+                profile_dto = ProfileDto(
+                    self.__model.selected_profile_id, name.strip(), vehicle_type.name, height, width, depth, weight,
+                )
+                self.__profile_provider.update_profile(self.__model.selected_profile_id, profile_dto)
 
             self.__load_profiles()
-            self.__load_current_profile_data()
+            self.__load_selected_profile_data()
             self.__model.editing_mode = FormMode.VIEW
-
         except Exception as e:
             self.show_error.emit(f"Ошибка сохранения профиля: {e}")
 
     @pyqtSlot()
     def request_delete_profile(self):
         """ Запросить подтверждение удаления профиля """
-        profile_id = self.__model.current_profile_id
+        profile_id = self.__model.selected_profile_id
         if profile_id is None:
             return
 
@@ -259,20 +246,21 @@ class SettingsDialogController(QObject):
     def confirm_delete_profile(self):
         """ Подтвержденное удаление профиля """
         try:
-            profile_id = self.__model.current_profile_id
+            profile_id = self.__model.selected_profile_id
             if profile_id is None:
                 return
 
-            if not self.__model.is_last_profile():
+            if self.__model.is_active_profile(profile_id):
+                self.show_error.emit("Нельзя удалить выбранный для расчёта профиль.")
+                return
+
+            if self.__model.is_last_profile():
                 self.show_error.emit("Нельзя удалить единственный зарегистрированный профиль.")
                 return
 
-            if self.__model.is_active_profile(profile_id):
-                self.__set_active_profile_id(None)
-
             self.__profile_provider.delete_profile(profile_id)
-            self.__model.current_profile_id = None
-            self.__load_current_profile_data()
+            self.__model.selected_profile_id = None
+            self.__load_selected_profile_data()
             self.__model.editing_mode = FormMode.EMPTY
 
             self.__load_profiles()
@@ -282,13 +270,9 @@ class SettingsDialogController(QObject):
 
     def set_active_profile(self):
         """ Установить текущий профиль как активный """
-        profile_id = self.__model.current_profile_id
+        profile_id = self.__model.selected_profile_id
         if profile_id is None:
             self.show_info.emit("profile_id is None")
-            return
-
-        if self.__model.active_profile_id == profile_id:
-            self.show_info.emit("self.__model.active_profile_id == profile_id")
             return
 
         try:
