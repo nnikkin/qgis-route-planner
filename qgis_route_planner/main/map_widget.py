@@ -3,6 +3,10 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QVBoxLayout, QPushButton, QWidget
 
 from qgis.core import (
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
+    QgsProject,
+    QgsRasterLayer,
     QgsVectorLayer,
     QgsRectangle
 )
@@ -81,16 +85,26 @@ class MapWidget(QgsMapCanvas):
     def set_layers(self, layers: list):
         """ Устанавливает слои на карту """
         self.__layers = layers
+        canvas_crs = (
+            QgsCoordinateReferenceSystem("EPSG:3857")
+            if any(isinstance(layer, QgsRasterLayer) for layer in layers)
+            else QgsCoordinateReferenceSystem("EPSG:4326")
+        )
+        self.setDestinationCrs(canvas_crs)
         self.setLayers(layers)
 
         extent = QgsRectangle()
         for layer in self.__layers:
-            if not layer or not layer.isValid():
+            if not isinstance(layer, QgsVectorLayer) or not layer.isValid():
                 continue
 
             layer_extent = layer.extent()
             if layer_extent.isEmpty():
                 continue
+
+            if layer.crs().isValid() and layer.crs() != canvas_crs:
+                transform = QgsCoordinateTransform(layer.crs(), canvas_crs, QgsProject.instance())
+                layer_extent = transform.transformBoundingBox(layer_extent)
 
             if extent.isEmpty():
                 extent = QgsRectangle(layer_extent)
@@ -101,6 +115,15 @@ class MapWidget(QgsMapCanvas):
             self.setExtent(extent)
 
         self.refresh()
+
+    def map_point_to_graph(self, point):
+        graph_crs = QgsCoordinateReferenceSystem("EPSG:4326")
+        canvas_crs = self.mapSettings().destinationCrs()
+        if not canvas_crs.isValid() or canvas_crs == graph_crs:
+            return point
+
+        transform = QgsCoordinateTransform(canvas_crs, graph_crs, QgsProject.instance())
+        return transform.transform(point)
 
     def add_layer(self, layer: QgsVectorLayer):
         """ Добавляет слой """

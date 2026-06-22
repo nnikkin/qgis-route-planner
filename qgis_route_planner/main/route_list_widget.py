@@ -41,7 +41,9 @@ class RouteListWidget(QToolBox):
 
     def add_page(self, route_id: int, route: list, info: dict):
         route_page = RouteListPage(route_id, route, info, self)
+        route_page.route_save_requested.connect(self.__open_file_fialog)
         self.__pages.append(route_page)
+        self.addItem(route_page, f"Маршрут №{route_id + 1}")
 
     def save_route(self):
         pass
@@ -52,3 +54,7 @@ class RouteListWidget(QToolBox):
             self.removeItem(0)
             if widget:
                 widget.deleteLater()
+        self.__pages.clear()
+
+    def __open_file_fialog(self, route_id: int):
+        self.route_save_requested.emit(route_id)

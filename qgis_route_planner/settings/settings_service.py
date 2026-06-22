@@ -26,18 +26,18 @@ class SettingsService:
     __KEY_SCHEMA = "schema"
     __KEY_ACTIVE_PROFILE = "active_profile_id"
     __KEY_POINT_SELECT_DIST = "point_select_distance"
+    __KEY_BASEMAP_ENABLED = "basemap_enabled"
+    __KEY_BASEMAP_URL = "basemap_url"
     __KEY_WEATHER_API_URL = "api_url"
     __KEY_WEATHER_API_KEY = "api_key"
     __KEY_FALLBACK_SEASON = "fallback_season"
-    __KEY_SUMMER_AVG_SPEED = "summer_avg_speed_kmh"
-    __KEY_WINTER_AVG_SPEED = "winter_avg_speed_kmh"
 
     # значения по умолчанию
-    __DEFAULT_POINT_SELECT_DIST = 10
+    __DEFAULT_POINT_SELECT_DIST = 500
+    __DEFAULT_BASEMAP_ENABLED = False
+    __DEFAULT_BASEMAP_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     __DEFAULT_WEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
     __DEFAULT_FALLBACK_SEASON = "summer"
-    __DEFAULT_SUMMER_SPEED_KMH = 60.0
-    __DEFAULT_WINTER_SPEED_KMH = 45.0
 
     def __init__(self):
         self.__settings: QSettings = QSettings(self.__SETTINGS_FILE, QSettings.Format.IniFormat)
@@ -87,53 +87,80 @@ class SettingsService:
                 self.__KEY_FALLBACK_SEASON,
                 self.__DEFAULT_FALLBACK_SEASON
             ),
-            self.__KEY_SUMMER_AVG_SPEED: float(self.__settings.value(
-                self.__KEY_SUMMER_AVG_SPEED,
-                self.__DEFAULT_SUMMER_SPEED_KMH
-            )),
-            self.__KEY_WINTER_AVG_SPEED: float(self.__settings.value(
-                self.__KEY_WINTER_AVG_SPEED,
-                self.__DEFAULT_WINTER_SPEED_KMH
-            )),
         }
         self.__settings.endGroup()
         return settings
 
     def save_weather_settings(
             self,
+            api_url: str,
             api_key: str,
             fallback_season: str,
-            summer_avg_speed_kmh: float,
-            winter_avg_speed_kmh: float,
     ):
         self.__settings.beginGroup(self.__GROUP_WEATHER)
-        self.__settings.setValue(self.__KEY_WEATHER_API_URL, self.__DEFAULT_WEATHER_API_URL)
+        self.__settings.setValue(
+            self.__KEY_WEATHER_API_URL,
+            (api_url or "").strip() or self.__DEFAULT_WEATHER_API_URL
+        )
         self.__settings.setValue(self.__KEY_WEATHER_API_KEY, api_key or "")
         self.__settings.setValue(self.__KEY_FALLBACK_SEASON, fallback_season or self.__DEFAULT_FALLBACK_SEASON)
-        self.__settings.setValue(self.__KEY_SUMMER_AVG_SPEED, summer_avg_speed_kmh)
-        self.__settings.setValue(self.__KEY_WINTER_AVG_SPEED, winter_avg_speed_kmh)
         self.__settings.endGroup()
         self.__settings.sync()
 
 
     # Работа с графом
-    def save_graph_settings(self, point_sel_dist: float):
+    def save_graph_settings(
+            self,
+            point_sel_dist: float,
+            basemap_enabled: bool | None = None,
+            basemap_url: str | None = None,
+    ):
         try:
             self.__settings.beginGroup(self.__GROUP_GRAPH)
             self.__settings.setValue(self.__KEY_POINT_SELECT_DIST, point_sel_dist or self.__DEFAULT_POINT_SELECT_DIST)
+            self.__settings.setValue(
+                self.__KEY_BASEMAP_ENABLED,
+                self.__DEFAULT_BASEMAP_ENABLED if basemap_enabled is None else bool(basemap_enabled)
+            )
+            self.__settings.setValue(
+                self.__KEY_BASEMAP_URL,
+                (basemap_url or "").strip() or self.__DEFAULT_BASEMAP_URL
+            )
             self.__settings.endGroup()
             self.__settings.sync()
         except Exception as e:
             raise PluginError(f" {str(e)}") from e
 
-    def load_select_distance_setting(self) -> float:
+    def load_graph_settings(self) -> dict:
         self.__settings.beginGroup(self.__GROUP_GRAPH)
-        raw = self.__settings.value(self.__KEY_POINT_SELECT_DIST, self.__DEFAULT_POINT_SELECT_DIST)
+        settings = {
+            self.__KEY_POINT_SELECT_DIST: self.load_select_distance_setting(open_group=False),
+            self.__KEY_BASEMAP_ENABLED: self.__bool_value(
+                self.__settings.value(self.__KEY_BASEMAP_ENABLED, self.__DEFAULT_BASEMAP_ENABLED)
+            ),
+            self.__KEY_BASEMAP_URL: self.__settings.value(self.__KEY_BASEMAP_URL, self.__DEFAULT_BASEMAP_URL),
+        }
         self.__settings.endGroup()
+        return settings
+
+    def load_select_distance_setting(self, open_group: bool = True) -> float:
+        if open_group:
+            self.__settings.beginGroup(self.__GROUP_GRAPH)
+        raw = self.__settings.value(self.__KEY_POINT_SELECT_DIST, self.__DEFAULT_POINT_SELECT_DIST)
+        if open_group:
+            self.__settings.endGroup()
         try:
             return float(raw)
         except (TypeError, ValueError):
             return float(self.__DEFAULT_POINT_SELECT_DIST)
+
+    @staticmethod
+    def __bool_value(value) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ("1", "true", "yes", "on")
+        return bool(value)
 
 
     # Работа с профилями ТС

@@ -101,7 +101,8 @@ class MainWindowController(QObject):
     @pyqtSlot(QgsPointXY)
     def on_map_point_selected(self, point: QgsPointXY):
         self.__routing_service.set_point_select_distance(self.__model.point_select_distance)
-        snapped = self.__routing_service.snap_point_to_road(point)
+        graph_point = self.__map_canvas.map_point_to_graph(point) if self.__map_canvas else point
+        snapped = self.__routing_service.snap_point_to_road(graph_point)
         if not snapped:
             self.__model.statusbar_message = "error:snap"
             return
@@ -120,7 +121,7 @@ class MainWindowController(QObject):
         edge_id = snap_info.get("edge_id")
         fraction = snap_info.get("fraction")
 
-        if node_id is None and edge_id is None:
+        if node_id is None:
             self.__model.statusbar_message = "error:no_node"
             return
 
@@ -139,6 +140,9 @@ class MainWindowController(QObject):
 
     @pyqtSlot()
     def on_clear_everything(self):
+        self.clear_route_state()
+
+    def clear_route_state(self):
         self.__current_route.clear()
         self.__model.clear()
         self.map_cleared.emit()
@@ -168,6 +172,7 @@ class MainWindowController(QObject):
             self.point_marker_remove_requested.emit(selected_id)
             for p in self.__current_route.points:
                 self.point_marker_update_requested.emit(p.id)
+            self.__clear_routes()
             self.__sync_points_and_rebuild()
 
     def __get_selected_point_id(self) -> int | None:
@@ -183,6 +188,11 @@ class MainWindowController(QObject):
         for p in self.__current_route.points:
             self.point_marker_update_requested.emit(p.id)
         self.__try_build_routes()
+
+    def __clear_routes(self):
+        self.__model.routes = []
+        self.__model.active_route_index = 0
+        self.routes_display_requested.emit([])
 
     @pyqtSlot(int)
     def on_route_selected(self, index: int):
@@ -202,10 +212,12 @@ class MainWindowController(QObject):
 
     def __try_build_routes(self):
         if not self.__current_route.has_required_points():
+            self.__clear_routes()
             return
 
         point_ids = self.__current_route.get_routing_node_ids()
         if not point_ids:
+            self.__clear_routes()
             return
 
         start_node_id = point_ids[0]

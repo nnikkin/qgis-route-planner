@@ -80,8 +80,35 @@ class LayerDialogsController(QObject):
             self.layer_selection_failed.emit("Выберите слои.")
             return
 
-        if not any(l.role == LayerRole.ROADS for l in self.__layer_config_model.selected_layers):
+        from collections import Counter
+        role_counts = Counter(layer.role for layer in self.__layer_config_model.selected_layers)
+        roads_count = role_counts[LayerRole.ROADS]
+        points_count = role_counts[LayerRole.POINTS]
+        parkings_count = role_counts[LayerRole.PARKING]
+        pipes_count = role_counts[LayerRole.PIPING]
+
+        if not roads_count:
             self.layer_selection_failed.emit("Для построения графа необходим хотя бы один слой с ролью 'Слой дорог'.")
+            return
+        if roads_count > 1:
+            self.layer_selection_failed.emit(
+                "Для построения графа выберите только один слой с ролью 'Слой дорог'."
+            )
+            return
+        if parkings_count > 1:
+            self.layer_selection_failed.emit(
+                "Для построения графа выберите только один слой с ролью 'Слой парковок'."
+            )
+            return
+        if pipes_count > 1:
+            self.layer_selection_failed.emit(
+                "Для построения графа выберите только один слой с ролью 'Слой трубопроводов'."
+            )
+            return
+        if points_count > 1:
+            self.layer_selection_failed.emit(
+                "Для построения графа выберите только один слой с ролью 'Слой точек'."
+            )
             return
 
         selected_layers = self.__layer_config_model.selected_layers
@@ -108,7 +135,22 @@ class LayerDialogsController(QObject):
         if errors:
             self.column_config_failed.emit(
                 "Для следующих из выбранных слоёв необходимо сопоставить обязательные поля:\n"
-                + "\n- ".join(errors)
+                + "\n".join(f"- {error}" for error in errors)
+            )
+            return
+
+        try:
+            errors = self.__service.validate_column_mapping(
+                self.__columns_config_model.layers,
+                self.__columns_config_model.mappings,
+            )
+        except Exception as e:
+            self.column_config_failed.emit(f"Не удалось проверить сопоставление колонок:\n{e}")
+            return
+        if errors:
+            self.column_config_failed.emit(
+                "Некоторые поля сопоставлены с неподходящими колонками:\n"
+                + "\n".join(f"- {error}" for error in errors)
             )
             return
 

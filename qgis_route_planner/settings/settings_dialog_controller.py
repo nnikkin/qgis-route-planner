@@ -22,6 +22,7 @@ class SettingsDialogController(QObject):
     graph_rebuild_requested = pyqtSignal()
     weather_settings_saved = pyqtSignal(dict)
     select_distance_setting_saved = pyqtSignal(float)
+    basemap_settings_saved = pyqtSignal(dict)
     active_profile_changed = pyqtSignal(object)
     show_error = pyqtSignal(str)
     show_warning = pyqtSignal(str)
@@ -67,12 +68,13 @@ class SettingsDialogController(QObject):
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки параметров подключения к БД: {e}")
 
-    def __load_profiles(self):
+    def __load_profiles(self, select_active: bool = True):
         """ Загрузить список профилей в модель """
         try:
             self.__model.profiles = self.__profile_provider.get_profiles()
             self.__model.active_profile_id = self.__service.get_active_profile_id()
-            self.__model.selected_profile_id = self.__model.active_profile_id
+            if select_active:
+                self.__model.selected_profile_id = self.__model.active_profile_id
             self.__load_selected_profile_data()
             self.__model.editing_mode = FormMode.VIEW if self.__model.selected_profile_id else FormMode.EMPTY
         except Exception as e:
@@ -81,7 +83,12 @@ class SettingsDialogController(QObject):
 
     def __load_graph_settings(self):
         try:
-            self.__model.point_select_distance = self.__service.load_select_distance_setting()
+            settings = self.__service.load_graph_settings()
+            self.__model.point_select_distance = float(settings.get("point_select_distance", 10.0))
+            self.__model.basemap_settings = {
+                "basemap_enabled": bool(settings.get("basemap_enabled", False)),
+                "basemap_url": settings.get("basemap_url", ""),
+            }
         except Exception as e:
             self.show_error.emit(e)
 
@@ -102,35 +109,30 @@ class SettingsDialogController(QObject):
         """ Запросить перестроение графа """
         self.graph_rebuild_requested.emit()
 
-    @pyqtSlot(float)
-    def save_graph_settings(self, dist_value: float):
+    @pyqtSlot(float, bool, str)
+    def save_graph_settings(self, dist_value: float, basemap_enabled: bool, basemap_url: str):
         try:
-            self.__service.save_graph_settings(dist_value)
+            self.__service.save_graph_settings(dist_value, basemap_enabled, basemap_url)
             self.__load_graph_settings()
             self.select_distance_setting_saved.emit(self.__model.point_select_distance)
+            self.basemap_settings_saved.emit(self.__model.basemap_settings)
             self.show_info.emit("Настройки сохранены")
         except Exception as e:
             self.show_error.emit(f"Ошибка сохранения настроек графа: {e}")
 
-    @pyqtSlot(str, str, str, float, float)
+    @pyqtSlot(str, str, str)
     def save_weather_settings(
             self,
+            api_url: str,
             api_key: str,
             fallback_season: str,
-            summer_avg_speed_kmh: float,
-            winter_avg_speed_kmh: float,
     ):
-        """ Сохранить настройки погодного сервиса и сезонных скоростей """
-        if summer_avg_speed_kmh <= 0 or winter_avg_speed_kmh <= 0:
-            self.show_warning.emit("Средняя скорость должна быть больше 0 км/ч.")
-            return
-
+        """ Сохранить настройки погодного сервиса """
         try:
             self.__service.save_weather_settings(
+                api_url.strip(),
                 api_key.strip(),
                 fallback_season,
-                summer_avg_speed_kmh,
-                winter_avg_speed_kmh,
             )
             self.__load_weather_settings()
             self.weather_settings_saved.emit(self.__model.weather_settings)
@@ -145,10 +147,13 @@ class SettingsDialogController(QObject):
             self.show_warning.emit("Введите API-ключ OpenWeatherMap.")
             return
 
-        if self.__weather_provider.test_connection():
-            self.show_info.emit("Подключение к OpenWeatherMap успешно проверено")
-        else:
-            self.show_error.emit("Не удалось подключиться к OpenWeatherMap. Проверьте правильность ввода API-ключа.")
+        try:
+            if self.__weather_provider.test_connection(api_url.strip(), api_key.strip()):
+                self.show_info.emit("Подключение к OpenWeatherMap успешно проверено")
+            else:
+                self.show_error.emit("Не удалось подключиться к OpenWeatherMap. Проверьте правильность ввода API-ключа.")
+        except Exception as e:
+            self.show_error.emit(f"Не удалось подключиться к OpenWeatherMap: {e}")
 
     @pyqtSlot()
     def start_profile_create(self):
@@ -206,20 +211,27 @@ class SettingsDialogController(QObject):
             return
 
         try:
+            active_profile_changed = False
+            changed_active_profile_id = None
             if mode == FormMode.CREATE:
                 profile = self.__profile_provider.create_profile(
                     name.strip(), vehicle_type.name, height, width, depth, weight,
                 )
-                self.__model.selected_profile_id = profile.id
             else:
                 profile_dto = ProfileDto(
                     self.__model.selected_profile_id, name.strip(), vehicle_type.name, height, width, depth, weight,
                 )
                 self.__profile_provider.update_profile(self.__model.selected_profile_id, profile_dto)
+                active_profile_changed = self.__model.is_active_profile(self.__model.selected_profile_id)
+                if active_profile_changed:
+                    changed_active_profile_id = self.__model.selected_profile_id
 
-            self.__load_profiles()
+            self.__load_profiles(select_active=False)
             self.__load_selected_profile_data()
             self.__model.editing_mode = FormMode.VIEW
+            if active_profile_changed and changed_active_profile_id is not None:
+                active_profile = self.__profile_provider.get_profile_by_id(changed_active_profile_id)
+                self.active_profile_changed.emit(active_profile)
         except Exception as e:
             self.show_error.emit(f"Ошибка сохранения профиля: {e}")
 

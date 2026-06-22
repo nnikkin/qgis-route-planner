@@ -156,6 +156,7 @@ class RestrictionRepository:
 
     @staticmethod
     def __row_to_dict(row) -> dict:
+        restriction_type_id = RestrictionRepository.__restriction_type_id_from_row(row)
         return {
             "id": row[0],
             "name": row[1],
@@ -166,10 +167,19 @@ class RestrictionRepository:
             "max_weight_t": row[6],
             "valid_from": row[7],
             "valid_to": row[8],
-            # Поля ниже возвращаем как None или пустые, чтобы не сломать внешние вызовы
-            "restriction_type_id": None,
+            "restriction_type_id": restriction_type_id,
             "restriction_type_code": None,
-            "restriction_type_name": None,
+            "restriction_type_name": RestrictionType.get_as_str(restriction_type_id),
             "value_num": None,
             "value_text": "",
         }
+
+    @staticmethod
+    def __restriction_type_id_from_row(row) -> int:
+        has_dimension = any(value is not None for value in (row[4], row[5], row[6]))
+        has_temporary = row[7] is not None or row[8] is not None
+        if has_dimension:
+            return RestrictionType.DIMENSION.value
+        if has_temporary:
+            return RestrictionType.TEMPORARY.value
+        return RestrictionType.SIMPLE.value

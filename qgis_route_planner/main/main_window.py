@@ -226,6 +226,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.points_list_widget.currentItemChanged.connect(self.__on_point_selection_changed)
         self.route_list_widget.route_selected.connect(self.__controller.on_route_selected)
         self.route_list_widget.route_save_requested.connect(self.__controller.on_save_route)
+        self.__on_status_message_changed(self.__model.statusbar_message)
 
     def __on_point_selection_changed(self, current, previous):
         has_selection = current is not None
@@ -245,7 +246,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.points_list_widget.clear()
 
         for route_point in points:
-            print(f"point(id={route_point.id},{route_point.point_type}) is None = {route_point is None}")
             if route_point.point_type == PointType.START:
                 prefix = "НАЧАЛО"
             elif route_point.point_type == PointType.END:
@@ -307,6 +307,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         }
 
         if message == "error:no_profile":
+            self.statusBar().showMessage("Транспортное средство не задано!")
             q = self._show_question(
                 "Сначала нужно создать профиль транспортного средства, либо установить существующий в качестве активного."
                 "\nВы хотите перейти в управление профилями?"
@@ -404,11 +405,20 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         """ Получить информацию по маршруту """
         if not route:
             return {'distance_km': 0, 'time_minutes': 0, 'segments': 0}
+        length_m = sum(self.__float_value(seg.get('length_m')) for seg in route)
+        time_seconds = sum(self.__float_value(seg.get('cost')) for seg in route)
         return {
-            'distance_km': sum(e['length_m'] for e in route) / 1000,
-            'time_minutes': sum(e['cost'] for e in route) / 60,
+            'distance_km': length_m / 1000,
+            'time_minutes': time_seconds / 60,
             'segments': len(route),
         }
+
+    @staticmethod
+    def __float_value(value) -> float:
+        try:
+            return float(value or 0)
+        except (TypeError, ValueError):
+            return 0
 
     @pyqtSlot(bool)
     def __on_point_select_mode_changed(self, active: bool):
