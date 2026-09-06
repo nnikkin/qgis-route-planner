@@ -24,6 +24,7 @@ class MainWindowController(QObject):
     show_point_context_menu_requested = pyqtSignal(object, object)
     routes_display_requested = pyqtSignal(list)
     map_cleared = pyqtSignal()
+    points_reordered = pyqtSignal(list)
     point_marker_add_requested = pyqtSignal(object)
     point_marker_remove_requested = pyqtSignal(int)
     point_marker_update_requested = pyqtSignal(int)
@@ -53,7 +54,7 @@ class MainWindowController(QObject):
         self.__routing_service: RoutingService = routing_service
 
         self.__current_route: SelectedPointCollection = SelectedPointCollection()
-        self.__active_profile = None
+        self.__active_profile: ActiveProfileDto | None = None
         self.__active_restriction_node_ids: list[int] = []
         self.__restriction_display_data: list[dict] = []
 
@@ -63,6 +64,9 @@ class MainWindowController(QObject):
 
     def set_map_canvas(self, canvas):
         self.__map_canvas = canvas
+
+    def set_selected_point(self, point_id: int | None):
+        self.__model.selected_point_id = point_id
 
     def open_settings_dialog(self, tab_index: int = 0):
         self.open_settings_requested.emit(tab_index)
@@ -100,7 +104,7 @@ class MainWindowController(QObject):
         self.__routing_service.set_point_select_distance(self.__model.point_select_distance)
         snapped = self.__routing_service.snap_point_to_road(point)
         if not snapped:
-            self.__model.status_message = "error:snap"
+            self.__model.statusbar_message = "error:snap"
             return
 
         snapped_point, snap_info = snapped
@@ -110,7 +114,7 @@ class MainWindowController(QObject):
     @pyqtSlot(QgsPointXY, PointType, object)
     def on_add_route_point(self, qgs_point_xy: QgsPointXY, point_type: PointType, snap_info):
         if not self.__active_profile:
-            self.__model.status_message = "error:no_profile"
+            self.__model.statusbar_message = "error:no_profile"
             return
 
         if not isinstance(snap_info, dict):
@@ -121,14 +125,14 @@ class MainWindowController(QObject):
         fraction = snap_info.get("fraction")
 
         if node_id is None and edge_id is None:
-            self.__model.status_message = "error:no_node"
+            self.__model.statusbar_message = "error:no_node"
             return
 
-        self.__current_route.add_point(
+        idx = self.__current_route.add_point(
             qgs_point_xy, point_type, node_id,
             edge_id=edge_id, fraction=fraction
         )
-        route_point = self.__current_route.get_point(self.__current_route.next_point_id - 1)
+        route_point = self.__current_route.get_point(idx - 1)
 
         self.__model.points = [
             self.__route_point_to_dto(point)
@@ -144,6 +148,47 @@ class MainWindowController(QObject):
         self.__model.clear()
         self.map_cleared.emit()
 
+    @pyqtSlot()
+    def on_move_point_up(self):
+        selected_id = self.__get_selected_point_id()
+        if selected_id is None:
+            return
+        if self.__current_route.move_up(selected_id):
+            self.__sync_points_and_rebuild()
+
+    @pyqtSlot()
+    def on_move_point_down(self):
+        selected_id = self.__get_selected_point_id()
+        if selected_id is None:
+            return
+        if self.__current_route.move_down(selected_id):
+            self.__sync_points_and_rebuild()
+
+    @pyqtSlot()
+    def on_delete_point(self):
+        selected_id = self.__get_selected_point_id()
+        if selected_id is None:
+            return
+        if self.__current_route.remove_point(selected_id):
+            self.point_marker_remove_requested.emit(selected_id)
+            for p in self.__current_route.points:
+                self.point_marker_update_requested.emit(p.id)
+            self.__sync_points_and_rebuild()
+
+    def __get_selected_point_id(self) -> int | None:
+        return self.__model.selected_point_id
+
+    def __sync_points_and_rebuild(self):
+        """ Обновить модель и пересчитать маршрут """
+        self.__model.points = [
+            self.__route_point_to_dto(p)
+            for p in self.__current_route.points
+        ]
+
+        for p in self.__current_route.points:
+            self.point_marker_update_requested.emit(p.id)
+        self.__try_build_routes()
+
     @pyqtSlot(int)
     def on_route_selected(self, index: int):
         self.__model.active_route_index = index
@@ -156,9 +201,9 @@ class MainWindowController(QObject):
         try:
             saved_path = self.__route_export_service.save_route(routes[route_index], self.__map_canvas)
             if saved_path:
-                self.__model.status_message = f"Маршрут сохранён: {saved_path}"
+                self.__model.statusbar_message = f"Маршрут сохранён: {saved_path}"
         except Exception as e:
-            self.__model.status_message = f"Ошибка сохранения маршрута: {e}"
+            self.__model.statusbar_message = f"Ошибка сохранения маршрута: {e}"
 
     def __try_build_routes(self):
         if not self.__current_route.has_required_points():
@@ -166,7 +211,7 @@ class MainWindowController(QObject):
             self.routes_display_requested.emit([])
             return
 
-        point_ids = self.__current_route.get_point_ids()
+        point_ids = self.__current_route.get_routing_node_ids()
         if not point_ids:
             return
 
@@ -188,7 +233,7 @@ class MainWindowController(QObject):
 
         if not found_routes:
             Logger.info("Маршруты не найдены")
-            self.__model.status_message = "error:no_routes"
+            self.__model.statusbar_message = "error:no_routes"
             self.__model.routes = []
             self.routes_display_requested.emit([])
             return

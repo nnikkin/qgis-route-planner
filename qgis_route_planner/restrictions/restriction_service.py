@@ -5,7 +5,6 @@ from datetime import datetime
 from psycopg.errors import Error as PsycopgError
 
 from qgis_route_planner.restrictions import RestrictionRecord, RestrictionType
-from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
 from qgis_route_planner.exceptions import DbConnectionError
 from qgis_route_planner.restrictions.restriction_repository import RestrictionRepository
 
@@ -47,17 +46,12 @@ class RestrictionService:
                 operation="get_restriction_by_id"
             ) from e
 
-    def get_active_restriction_node_ids(
-            self,
-            profile: VehicleProfile | None,
-            at_dt: datetime | None = None,
-    ) -> list[int]:
-        """ Вернуть node_id ограничений, актуальных для текущего расчёта """
+    def get_active_temp_restriction_node_ids(self) -> list[int]:
         records = [
             RestrictionRecord.dict_to_record(row)
             for row in self.get_all_restrictions()
         ]
-        current_dt = at_dt or datetime.now()
+        current_dt = datetime.now()
         node_ids = []
 
         for record in records:
@@ -65,8 +59,48 @@ class RestrictionService:
                 continue
             if self.__is_edge_dimension_restriction(record):
                 continue
-            if self.__is_restriction_active(record, profile, current_dt):
+            if self.__is_temporary_restriction_active(record, current_dt):
                 node_ids.append(record.node_id)
+
+        return list(dict.fromkeys(node_ids))
+
+    def get_active_dimension_restriction_node_ids(
+            self,
+            vehicle_height: float,
+            vehicle_width: float,
+            vehicle_weight: float
+    ) -> list[int]:
+        records = [
+            RestrictionRecord.dict_to_record(row)
+            for row in self.get_all_restrictions()
+        ]
+        node_ids = []
+
+        for record in records:
+            if record.node_id is None:
+                continue
+            if self.__is_edge_dimension_restriction(record):
+                continue
+            if self.__is_dimension_restriction_active(record, vehicle_height, vehicle_width, vehicle_weight):
+                node_ids.append(record.node_id)
+
+        return list(dict.fromkeys(node_ids))
+
+    def get_active_simple_restriction_node_ids(
+            self,
+    ) -> list[int]:
+        records = [
+            RestrictionRecord.dict_to_record(row)
+            for row in self.get_all_restrictions()
+        ]
+        node_ids = []
+
+        for record in records:
+            if record.node_id is None:
+                continue
+            if self.__is_edge_dimension_restriction(record):
+                continue
+            node_ids.append(record.node_id)
 
         return list(dict.fromkeys(node_ids))
 
@@ -108,21 +142,6 @@ class RestrictionService:
                 operation="create_restriction"
             ) from e
 
-    def __is_restriction_active(
-            self,
-            record: RestrictionRecord,
-            profile: VehicleProfile | None,
-            at_dt: datetime,
-    ) -> bool:
-        """ Проверка, действует ли ограничение сейчас """
-        if record.restriction_type_id == RestrictionType.SIMPLE.value:
-            return True
-        if record.restriction_type_id == RestrictionType.TEMPORARY.value:
-            return self.__is_temporary_restriction_active(record, at_dt)
-        if record.restriction_type_id == RestrictionType.DIMENSION.value:
-            return self.__is_dimension_restriction_active(record, profile)
-        return False
-
     def __is_temporary_restriction_active(self, record: RestrictionRecord, at_dt: datetime) -> bool:
         """ Действует ли ограничение по времени """
         dates = record.temporary_dates()
@@ -138,17 +157,16 @@ class RestrictionService:
     def __is_dimension_restriction_active(
             self,
             record: RestrictionRecord,
-            profile: VehicleProfile | None,
+            vehicle_height: float,
+            vehicle_width: float,
+            vehicle_weight: float
     ) -> bool:
         """ Действует ли ограничение по габаритам """
-        if profile is None:
-            return False
-
         values = record.dimension_values()
         checks = (
-            (profile.height_m, values.get("height", 0)),
-            (profile.width_m, values.get("width", 0)),
-            (profile.weight_t, values.get("weight", 0)),
+            (vehicle_height, values.get("height", 0)),
+            (vehicle_width, values.get("width", 0)),
+            (vehicle_weight, values.get("weight", 0)),
         )
         return any(limit > 0 and actual > limit for actual, limit in checks)
 

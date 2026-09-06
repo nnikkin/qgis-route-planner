@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import pyqtSlot
 from qgis.PyQt.QtWidgets import QAction, QMenu
-from qgis.PyQt.QtGui import QCursor, QIcon
+from qgis.PyQt.QtGui import QCursor, QIcon, QPixmap
 from qgis.PyQt.QtCore import Qt
 
 from qgis.core import QgsPointXY, QgsVectorLayer
@@ -53,18 +53,39 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         )
 
         # Вкладка "Точки"
-        self.tab = QtWidgets.QWidget()
-        self.gridLayout_2 = QtWidgets.QGridLayout(self.tab)
-        self.points_list_widget = QtWidgets.QListWidget(self.tab)
-        self.gridLayout_2.addWidget(self.points_list_widget, 0, 0, 1, 1)
-        self.tabWidget.addTab(self.tab, "Точки")
+        self.tab_points = QtWidgets.QWidget()
+        self.points_gridLayout = QtWidgets.QGridLayout(self.tab_points)
+        self.points_list_widget = QtWidgets.QListWidget(self.tab_points)
+        self.points_list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        self.points_list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.points_list_widget.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.InternalMove)
+        self.points_gridLayout.addWidget(self.points_list_widget, 0, 0, 1, 1)
+        self.tabWidget.addTab(self.tab_points, "Точки")
+
+        self.point_buttons_layout = QtWidgets.QVBoxLayout(self.tab_points)
+        self.move_point_up_btn = QtWidgets.QPushButton(self.tab_points)
+        self.move_point_up_btn.setText("↑")
+        self.move_point_up_btn.setEnabled(False)
+        self.points_gridLayout.addWidget(self.move_point_up_btn, 0, 0, 1, 1)
+
+        self.point_buttons_layout = QtWidgets.QVBoxLayout(self.tab_points)
+        self.move_point_down_btn = QtWidgets.QPushButton(self.tab_points)
+        self.move_point_down_btn.setText("↓")
+        self.move_point_down_btn.setEnabled(False)
+        self.points_gridLayout.addWidget(self.move_point_down_btn, 0, 0, 1, 1)
+
+        self.point_buttons_layout = QtWidgets.QVBoxLayout(self.tab_points)
+        self.delete_point_btn = QtWidgets.QPushButton(self.tab_points)
+        self.delete_point_btn.setIcon(QIcon(QPixmap(":points_list_icons/map_delete_point")))
+        self.delete_point_btn.setEnabled(False)
+        self.points_gridLayout.addWidget(self.delete_point_btn, 0, 0, 1, 1)
 
         # Вкладка "Маршруты"
-        self.tab_2 = QtWidgets.QWidget()
-        self.gridLayout = QtWidgets.QGridLayout(self.tab_2)
-        self.route_list_widget = RouteListWidget(self.tab_2)
-        self.gridLayout.addWidget(self.route_list_widget, 0, 0, 1, 1)
-        self.tabWidget.addTab(self.tab_2, "Маршруты")
+        self.tab_routes = QtWidgets.QWidget()
+        self.routes_gridLayout = QtWidgets.QGridLayout(self.tab_routes)
+        self.route_list_widget = RouteListWidget(self.tab_routes)
+        self.routes_gridLayout.addWidget(self.route_list_widget, 0, 0, 1, 1)
+        self.tabWidget.addTab(self.tab_routes, "Маршруты")
 
         self.verticalLayout.addWidget(self.tabWidget)
 
@@ -122,8 +143,11 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
     def __retranslateUi(self):
         _translate = QtCore.QCoreApplication.translate
         self.setWindowTitle(_translate("MainWindow", "Поиск маршрутов"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "Точки"))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_2), _translate("MainWindow", "Маршруты"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_points), _translate("MainWindow", "Точки"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_routes), _translate("MainWindow", "Маршруты"))
+        self.move_point_up_btn.setText(_translate("MainWindow", "Переместить точку выше"))
+        self.move_point_down_btn.setText(_translate("MainWindow", "Переместить точку ниже"))
+        self.delete_point_btn.setText(_translate("MainWindow", "Удалить точку маршрута"))
         self.clear_list_button.setText(_translate("MainWindow", "Построить новый маршрут"))
         self.settings_menu.setTitle(_translate("MainWindow", "Настройки"))
         self.view_menu.setTitle(_translate("MainWindow", "Вид"))
@@ -148,7 +172,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__model.points_changed.connect(self.__on_points_changed)
         self.__model.routes_changed.connect(self.__on_routes_changed)
         self.__model.active_route_changed.connect(self.__on_active_route_changed)
-        self.__model.status_message_changed.connect(self.__on_status_message_changed)
+        self.__model.statusbar_message_changed.connect(self.__on_status_message_changed)
         self.__model.active_tab_changed.connect(self.tabWidget.setCurrentIndex)
         self.__model.clear_button_enabled_changed.connect(self.__on_clear_button_enabled_changed)
         self.__model.restriction_select_mode_activated.connect(self.__on_point_select_mode_changed)
@@ -165,9 +189,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__controller.restrict_points_display_requested.connect(self.__display_visible_restrictions)
         self.__controller.restrict_points_display_cleared.connect(self.__clear_visible_restriction_markers)
 
-        self.__connect_ui_to_controller()
-
-    def __connect_ui_to_controller(self):
         self.db_action.triggered.connect(
             lambda: self.__controller.open_settings_dialog(0)
         )
@@ -199,12 +220,31 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         self.__select_restriction_point_tool.pointClicked.connect(self.__controller.on_map_point_selected)
 
         self.clear_list_button.clicked.connect(self.__controller.on_clear_everything)
+        self.move_point_up_btn.clicked.connect(self.__controller.on_move_point_up)
+        self.move_point_down_btn.clicked.connect(self.__controller.on_move_point_down)
+        self.delete_point_btn.clicked.connect(self.__controller.on_delete_point)
+        self.points_list_widget.currentItemChanged.connect(self.__on_point_selection_changed)
         self.route_list_widget.route_selected.connect(self.__controller.on_route_selected)
         self.route_list_widget.route_save_requested.connect(self.__controller.on_save_route)
 
+    @pyqtSlot(object, object)
+    def __on_point_selection_changed(self, current):
+        has_selection = current is not None
+        point_id = current.data(Qt.ItemDataRole.UserRole) if has_selection else None
+        self.__controller.set_selected_point(point_id)
+
+        idx = self.points_list_widget.currentRow()
+        count = self.points_list_widget.count()
+        self.move_point_up_btn.setEnabled(has_selection and idx > 0)
+        self.move_point_down_btn.setEnabled(has_selection and idx < count - 1)
+        self.delete_point_btn.setEnabled(has_selection)
+
     @pyqtSlot(list)
     def __on_points_changed(self, points: list[RoutePointDto]):
+        selected_id = self.__model.selected_point_id
+        self.points_list_widget.blockSignals(True)
         self.points_list_widget.clear()
+
         for route_point in points:
             if route_point.point_type == PointType.START.name:
                 prefix = "НАЧАЛО"
@@ -218,6 +258,19 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             )
             item.setData(Qt.ItemDataRole.UserRole, route_point.id)
             self.points_list_widget.addItem(item)
+            if route_point.id == selected_id:
+                self.points_list_widget.setCurrentItem(item)
+
+        self.points_list_widget.blockSignals(False)
+        self.__refresh_point_buttons()
+
+    def __refresh_point_buttons(self):
+        idx = self.points_list_widget.currentRow()
+        count = self.points_list_widget.count()
+        has_selection = idx >= 0
+        self.move_point_up_btn.setEnabled(has_selection and idx > 0)
+        self.move_point_down_btn.setEnabled(has_selection and idx < count - 1)
+        self.delete_point_btn.setEnabled(has_selection)
 
     @pyqtSlot(list)
     def __on_routes_changed(self, routes: list):
@@ -246,14 +299,14 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
         }
 
         if message == "error:no_profile":
-            q = self._show_question(self,
+            q = self._show_question(
                 "Сначала нужно создать профиль транспортного средства, либо установить существующий в качестве активного."
                 "\nВы хотите перейти в управление профилями?"
             )
             if q:
                 self.__controller.open_settings_dialog(1)
-        elif message in error_messages and error_messages[message]:
-            self._show_warning(self, error_messages[message])
+        elif message in error_messages:
+            self._show_warning(error_messages[message])
         else:
             self.statusBar().showMessage(message)
 
@@ -298,9 +351,9 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
             has_end = any(p.point_type == PointType.END.name for p in points)
 
             actions = [
-                ("Установить как начальную точку", PointType.START, not has_start),
-                ("Установить как промежуточную точку", PointType.WAYPOINT, has_start),
-                ("Установить как конечную точку", PointType.END, has_start and not has_end),
+                ("Маршрут отсюда", PointType.START, not has_start),
+                ("Маршрут сюда", PointType.END, has_start and not has_end),
+                ("Добавить промежуточную точку", PointType.WAYPOINT, has_start)
             ]
             for title, point_type, enabled in actions:
                 action = QAction(title, menu)
@@ -315,6 +368,7 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     @pyqtSlot(object)
     def __add_point_marker(self, route_point: RoutePoint):
+        print(self.__model.points)
         self.__map_manager.add_point_marker(route_point)
 
     @pyqtSlot(int)
@@ -401,7 +455,6 @@ class MainWindow(QtWidgets.QMainWindow, MessageBoxMixin):
 
     def __open_about_dialog(self):
         self._show_info(
-            self,
             """<html><body>
                     <p>В проекте используется набор иконок Fugue Icons.<br>
                     (C) 2013 <a href="https://p.yusukekamiyamane.com">Yusuke Kamiyamane</a>. All rights reserved.</p>

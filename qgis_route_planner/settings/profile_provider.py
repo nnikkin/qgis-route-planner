@@ -8,7 +8,7 @@ class ProfileProvider(Protocol):
     def get_profile_by_id(self, current_profile_id):
         pass
 
-    def create_profile(self, name, type, height_m, width_m, depth_m, weight_t):
+    def create_profile(self, name: str, vtype, height: float, width: float, depth: float, weight: float):
         pass
 
     def update_profile(self, current_profile_id, profile):

@@ -98,7 +98,7 @@ class PluginCoordinator(QObject):
 
         self.__db_connection: DbConnection | None = None
 
-        self.__settings_service: SettingsService | None = None
+        self.__settings_service: SettingsService = SettingsService()
         self.__spatial_data_service: SpatialDataService | None = None
         self.__routing_service: RoutingService | None = None
         self.__restriction_service: RestrictionService | None = None
@@ -121,9 +121,24 @@ class PluginCoordinator(QObject):
         self.__connect()
 
     def first_start_initialize(self):
-        self.__is_initialized = False
         Logger.info("Начата инициализация плагина")
+
+        self.__is_initialized = False
+        self.__load_saved_db_params()
         self.__db_config_dialog.open()
+
+    def __load_saved_db_params(self):
+        try:
+            saved_params = self.__settings_service.load_db_params()
+            if saved_params and saved_params.has_required_params():
+                self.__db_config_model.host = saved_params.host
+                self.__db_config_model.port = saved_params.port
+                self.__db_config_model.database = saved_params.database
+                self.__db_config_model.username = saved_params.username
+                self.__db_config_model.password = saved_params.password
+        except Exception as e:
+            QMessageBox.critical(f"Не удалось загрузить сохранённые параметры подключения: {e}")
+            Logger.warning(f"Не удалось загрузить сохранённые параметры подключения: {e}")
 
     def open_main_window(self):
         if not self.__is_initialized:
@@ -179,7 +194,7 @@ class PluginCoordinator(QObject):
             self.__load_map_layers
         )
         self.__main_window_controller.active_restriction_nodes_requested.connect(
-            self.__provide_active_restriction_node_ids
+            self.__provide_active_restriction_ids
         )
 
         self.__restriction_controller = RestrictionDialogController(
@@ -217,7 +232,6 @@ class PluginCoordinator(QObject):
         self.__restriction_repo = RestrictionRepository(self.__db_connection)
 
     def __init_services(self):
-        self.__settings_service = SettingsService()
         self.__vehicle_service = VehicleService(self.__vehicle_repo)
         self.__spatial_data_service = SpatialDataService(
             self.__layer_repo,
@@ -283,8 +297,13 @@ class PluginCoordinator(QObject):
 
             self.__layer_select_dialog.open()
         except Exception as e:
-            QMessageBox.critical(self.__layer_select_dialog, "Ошибка",
-                                 f"Не удалось завершить инициализацию плагина:\n{e}", QMessageBox.Ok)
+            QMessageBox.critical(
+                None, "Ошибка",
+                f"Не удалось завершить инициализацию плагина:\n{e}",
+                QMessageBox.Ok
+            )
+            Logger.error(f"Не удалось завершить инициализацию плагина: {e}")
+            self.__initialization_failed()
 
     def __back_to_db_config(self):
         self.__db_config_dialog.open()
@@ -328,8 +347,16 @@ class PluginCoordinator(QObject):
             layers.extend(self.__spatial_data_service.get_selected_spatial_layers(selected_layers))
         self.__main_window_controller.set_map_layers(layers)
 
-    def __provide_active_restriction_node_ids(self, profile):
-        node_ids = self.__restriction_service.get_active_restriction_node_ids(profile)
+    def __provide_active_restriction_ids(self, profile):
+        node_ids = []
+        temp_node_ids = self.__restriction_service.get_active_temp_restriction_node_ids()
+        dim_node_ids = self.__restriction_service.get_active_dimension_restriction_node_ids(profile.height, profile.width, profile.weight)
+        simple_node_ids = self.__restriction_service.get_active_simple_restriction_node_ids()
+
+        node_ids.extend(temp_node_ids)
+        node_ids.extend(dim_node_ids)
+        node_ids.extend(simple_node_ids)
+
         self.__main_window_controller.set_active_restriction_node_ids(node_ids)
 
     def __initialization_finished(self):

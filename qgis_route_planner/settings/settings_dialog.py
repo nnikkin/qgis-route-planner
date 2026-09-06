@@ -246,6 +246,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__profileHeightSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
         self.__profileHeightSpinBox.setEnabled(False)
+        self.__profileHeightSpinBox.setMinimum(0.01)
         self.__profileHeightSpinBox.setMaximum(999999.0)
         self.__profileHeightSpinBox.setStepType(QtWidgets.QAbstractSpinBox.StepType.AdaptiveDecimalStepType)
         self.__profileHeightSpinBox.setObjectName("profileHeightSpinBox")
@@ -253,12 +254,14 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__profileWidthSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
         self.__profileWidthSpinBox.setEnabled(False)
+        self.__profileWidthSpinBox.setMinimum(0.01)
         self.__profileWidthSpinBox.setMaximum(999999.0)
         self.__profileWidthSpinBox.setObjectName("profileWidthSpinBox")
         self.__formLayout.setWidget(3, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileWidthSpinBox)
 
         self.__profileWeightSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
         self.__profileWeightSpinBox.setEnabled(False)
+        self.__profileWeightSpinBox.setMinimum(0.01)
         self.__profileWeightSpinBox.setMaximum(999999.0)
         self.__profileWeightSpinBox.setObjectName("profileWeightSpinBox")
         self.__formLayout.setWidget(5, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileWeightSpinBox)
@@ -279,6 +282,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.__profileDepthSpinBox = QtWidgets.QDoubleSpinBox(self.__profilesFormLayout)
         self.__profileDepthSpinBox.setEnabled(False)
+        self.__profileDepthSpinBox.setMinimum(0.01)
         self.__profileDepthSpinBox.setMaximum(999999.0)
         self.__profileDepthSpinBox.setObjectName("profileDepthSpinBox")
         self.__formLayout.setWidget(4, QtWidgets.QFormLayout.ItemRole.FieldRole, self.__profileDepthSpinBox)
@@ -495,7 +499,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __confirm_delete_profile(self, profile_name: str, is_active: bool):
         """ Показать диалог подтверждения удаления профиля """
         msg = "Вы пытаетесь удалить активный профиль.\n" if is_active else ""
-        confirm_delete = self._show_question(self,
+        confirm_delete = self._show_question(
             f"{msg}Вы уверены, что хотите удалить профиль '{profile_name}'?",
             "Подтверждение удаления"
         )
@@ -609,10 +613,10 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
         """ Заполнить форму данными профиля """
         self.__profileNameEdit.setText(profile.name)
 
-        index = self.__vehicleTypeComboBox.findData(profile.type.name)
+        index = self.__vehicleTypeComboBox.findData(profile.type)
         if index < 0:
             try:
-                index = self.__vehicleTypeComboBox.findData(VehicleType[profile.type.value])
+                index = self.__vehicleTypeComboBox.findData(VehicleType[profile.type])
             except KeyError:
                 index = -1
         if index >= 0:
@@ -635,7 +639,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     # Слоты для событий от виджетов
     def __on_change_db_clicked(self):
         """ Обработчик нажатия на кнопку изменения БД """
-        confirm_change = self._show_question(self,
+        confirm_change = self._show_question(
             "Вы уверены, что хотите изменить настройки подключения к БД?",
         )
         if confirm_change:
@@ -644,7 +648,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     def __on_rebuild_graph_clicked(self):
         """ Обработчик нажатия на кнопку перестроения графа """
-        confirm_rebuild = self._show_question(self,
+        confirm_rebuild = self._show_question(
             "Вы уверены, что хотите перестроить граф?"
         )
         if confirm_rebuild:
@@ -710,7 +714,7 @@ class SettingsDialog(QtWidgets.QDialog, MessageBoxMixin):
     def closeEvent(self, event):
         """ Обработчик закрытия окна """
         if self.__model.editing_mode == FormMode.EDIT or self.__model.editing_mode == FormMode.CREATE:
-            close_question = self._show_question(self,
+            close_question = self._show_question(
                 "Вы уверены, что хотите отменить несохранённые изменения и закрыть окно настроек?"
             )
             if close_question:

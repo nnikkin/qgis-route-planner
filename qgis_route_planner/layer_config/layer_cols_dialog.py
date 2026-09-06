@@ -98,7 +98,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
             event.accept()
             return
 
-        close_question = self._show_question(self,
+        close_question = self._show_question(
             "Для продолжения требуется выполнить настройку полей.\nВы уверены, что хотите закрыть мастер подключения?"
         )
         if close_question:
@@ -117,7 +117,7 @@ class LayerColumnsDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     @pyqtSlot(str)
     def __on_column_config_failed(self, message: str):
-        self._show_error(self, message)
+        self._show_error(message)
 
     def __accept_step(self):
         self.__step_finished = True

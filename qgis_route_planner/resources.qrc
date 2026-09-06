@@ -11,6 +11,9 @@
     <file alias="map_marker">png_resources/icons/marker.png</file>
     <file alias="map_restrict">png_resources/icons/prohibition-button.png</file>
   </qresource>
+  <qresource prefix="points_list_icons">
+    <file alias="map_delete_point">png_resources/icons/marker--minus.png</file>
+  </qresource>
   <qresource prefix="route_list_icons">
     <file alias="save_icon">png_resources/icons/disk.png</file>
   </qresource>

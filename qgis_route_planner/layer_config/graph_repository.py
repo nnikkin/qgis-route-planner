@@ -7,14 +7,13 @@ from .layer_config_model import Layer
 from .layer_role import LayerRole
 from .column_role import ColumnRole
 
-from qgis_route_planner.exceptions import NodeNotFoundError
+from qgis_route_planner.exceptions import NodeNotFoundError, TopologyBuildError
 
-from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
 from qgis_route_planner.core.db_connection import DbConnection
 
 
 class RoadGraphRepository:
-    """ Репозитроий для работы с таблицами графа """
+    """ Репозиторий для работы с таблицами графа """
     def __init__(self, db: DbConnection):
         self.__db = db
 
@@ -190,7 +189,7 @@ class RoadGraphRepository:
     def __create_relation_restrictions_table(self):
         """
         Создание таблицы routing.osm_relation_restrictions.
-        Хранит теги restriction и turn_restriction из OSM-релейшнов для справки
+        Хранит теги restriction и turn_restriction для справки
         """
         self.__db.execute_nonquery("""
             CREATE TABLE IF NOT EXISTS routing.osm_relation_restrictions (
@@ -269,7 +268,7 @@ class RoadGraphRepository:
         """)
 
     def create_topology(self):
-        """ Перестроить топологию существующего графа """
+        """ Перестроить топологию графа """
         table_exists = self.__db.execute_query("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
@@ -278,11 +277,11 @@ class RoadGraphRepository:
         """)
 
         if not table_exists:
-            raise BaseException("Таблица graph_edges не найдена. Сначала загрузите данные!")
+            raise TopologyBuildError("Таблица graph_edges не найдена. Сначала загрузите данные!")
         else:
             count = self.__db.execute_query("SELECT COUNT(*) FROM routing.graph_edges;")
             if count and count[0][0] == 0:
-                raise BaseException("Нет данных в таблице graph_edges. Сначала загрузите данные!")
+                raise TopologyBuildError("Нет данных в таблице graph_edges. Сначала загрузите данные!")
 
         self.__fill_edges_source_target()
         self.__keep_largest_connected_components()
@@ -332,7 +331,7 @@ class RoadGraphRepository:
         """ Заполнение таблицы graph_edges рёбрами """
         line_table = self.__get_line_table(layers)
         if line_table is None:
-            raise ValueError("Не выбрана таблица с линейной геометрией для построения графа.")
+            raise TopologyBuildError("Не выбрана таблица с линейной геометрией для построения графа.")
 
         self.__db.execute_nonquery("TRUNCATE routing.graph_edges CASCADE")
         self.__db.execute_nonquery("TRUNCATE routing.graph_nodes CASCADE")
@@ -358,7 +357,7 @@ class RoadGraphRepository:
             missing_roles.append(ColumnRole.HIGHWAY.value)
 
         if missing_roles:
-            raise ValueError(
+            raise TopologyBuildError(
                 "Для таблицы '{}' не сопоставлены обязательные поля: {}.".format(
                     line_table, ", ".join(missing_roles)
                 )
@@ -898,9 +897,9 @@ class RoadGraphRepository:
 
             self.__db.execute_nonquery(query)
 
-    def __pgr_ksp(self, start_id, end_id, k, profile, route_points=None, restriction_nodes=None, route_speed_kmh=None):
-        """ Используемый алгоритм поиска n маршрутов. Не учитывает turn_restrictions! """
-        sql_edges_query = self.__routing_edges_sql(profile, restriction_nodes, route_speed_kmh)
+    def __pgr_ksp(self, start_id, end_id, k, profile_details, route_points=None, restriction_nodes=None, route_speed_kmh=None):
+        """ Используемый алгоритм поиска n маршрутов. """
+        sql_edges_query = self.__routing_edges_sql(profile_details, restriction_nodes, route_speed_kmh)
         sql_points_query = self.__routing_points_sql(route_points)
         travel_time = self.__travel_time_sql(route_speed_kmh)
 
@@ -956,7 +955,7 @@ class RoadGraphRepository:
             self,
             start_id: int,
             end_id: int,
-            profile: VehicleProfile,
+            profile_details: dict[str, float],
             waypoint_ids: list[int] = None,
             route_points: list = None,
             restriction_nodes: list[int] = None,
@@ -970,7 +969,7 @@ class RoadGraphRepository:
             raise NodeNotFoundError(f"Конечный узел {end_id} не найден в БД!")
 
         if not waypoint_ids:
-            rows = self.__pgr_ksp(start_id, end_id, routes_n, profile, route_points, restriction_nodes, route_speed_kmh)
+            rows = self.__pgr_ksp(start_id, end_id, routes_n, profile_details, route_points, restriction_nodes, route_speed_kmh)
             routes = {}
             for row in rows:
                 path_id = row[0]
@@ -1072,7 +1071,7 @@ class RoadGraphRepository:
 
     def __routing_edges_sql(
             self,
-            profile: VehicleProfile,
+            profile_details: dict[str, float],
             restriction_nodes: list = None,
             route_speed_kmh: float | None = None,
     ) -> str:
@@ -1089,20 +1088,20 @@ class RoadGraphRepository:
         return f"""
             SELECT edge_id as id, source, target,
                CASE
-                   WHEN max_height IS NOT NULL AND max_height < {profile.height_m} THEN -1
-                   WHEN max_width_m IS NOT NULL AND max_width_m > 0 AND max_width_m < {profile.width_m} THEN -1
-                   WHEN max_weight_t IS NOT NULL AND max_weight_t > 0 AND max_weight_t < {profile.weight_t} THEN -1
+                   WHEN max_height IS NOT NULL AND max_height < {profile_details['height']} THEN -1
+                   WHEN max_width_m IS NOT NULL AND max_width_m > 0 AND max_width_m < {profile_details['width']} THEN -1
+                   WHEN max_weight_t IS NOT NULL AND max_weight_t > 0 AND max_weight_t < {profile_details['weight']} THEN -1
                    ELSE {cost_expr}
                END as cost,
                CASE
-                   WHEN max_height IS NOT NULL AND max_height < {profile.height_m} THEN -1
-                   WHEN max_width_m IS NOT NULL AND max_width_m > 0 AND max_width_m < {profile.width_m} THEN -1
-                   WHEN max_weight_t IS NOT NULL AND max_weight_t > 0 AND max_weight_t < {profile.weight_t} THEN -1
+                   WHEN max_height IS NOT NULL AND max_height < {profile_details['height']} THEN -1
+                   WHEN max_width_m IS NOT NULL AND max_width_m > 0 AND max_width_m < {profile_details['width']} THEN -1
+                   WHEN max_weight_t IS NOT NULL AND max_weight_t > 0 AND max_weight_t < {profile_details['weight']} THEN -1
                    WHEN is_oneway = TRUE THEN -1
                    ELSE {reverse_cost_expr}
                END as reverse_cost
         FROM routing.graph_edges
-        {"WHERE hgv IS NOT FALSE" if profile.type.name.lower() == 'truck' else "WHERE 1=1"}
+        {"WHERE hgv IS NOT FALSE" if profile['type'].lower() == 'truck' else "WHERE 1=1"}
         {restriction_condition}
     """
 

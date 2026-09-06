@@ -172,7 +172,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
             event.accept()
             return
 
-        close_question = self._show_question(self,
+        close_question = self._show_question(
             "Для продолжения требуется выбрать слои.\nВы уверены, что хотите закрыть мастер подключения?",
             "Внимание"
         )
@@ -185,7 +185,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
     def __on_push_to_table_clicked(self):
         selected_item = self.listWidget.currentItem()
         if not selected_item:
-            self._show_warning(self, "Выберите название слоя из списка слева.")
+            self._show_warning("Выберите название слоя из списка слева.")
             return
         l_name = selected_item.text()
         self.__controller.add_layer_to_config(layer_name=l_name, layer_role=LayerRole.ROADS)
@@ -194,7 +194,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
         selected_rows = self.tableWidget.selectionModel().selectedRows()
 
         if not selected_rows:
-            self._show_warning(self, "Выберите строку в таблице справа.")
+            self._show_warning("Выберите строку в таблице справа.")
             return
 
         self.__controller.remove_layer_from_config(selected_rows[0].row())
@@ -213,7 +213,7 @@ class LayersSelectDialog(QtWidgets.QDialog, MessageBoxMixin):
 
     @pyqtSlot(str)
     def __on_layer_selection_failed(self, message: str):
-        self._show_warning(self, message)
+        self._show_warning(message)
 
     def __on_combobox_role_changed(self, row, text):
         role = LayerRole.from_value(text)
