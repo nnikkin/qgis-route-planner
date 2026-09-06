@@ -1,25 +1,27 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from layer_config_model import LayerConfigModel
-    from qgis_route_planner.layer_config.cols_config_model import ColumnsConfigModel
-    from spatial_data_service import SpatialDataService
+    from .layer_config_model import LayerConfigModel
+    from .cols_config_model import ColumnsConfigModel
+    from .spatial_data_service import SpatialDataService
 
-from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject
 
-from qgis_route_planner.layer_config.column_role import ColumnRole
-from layer_role import LayerRole
+from .column_role import ColumnRole
+from .layer_role import LayerRole
 
 
-class LayerDialogsController:
+class LayerDialogsController(QObject):
     """ Контроллер окон инициализации плагина """
     layers_selected = pyqtSignal()
     columns_configured = pyqtSignal()
+    layer_select_back_requested = pyqtSignal()
+    column_setup_back_requested = pyqtSignal()
 
     connection_failed = pyqtSignal(str)
     layer_selection_failed = pyqtSignal(str)
     column_config_failed = pyqtSignal(str)
-    init_cancelled = pyqtSignal()
+    initialization_cancelled = pyqtSignal()
 
     show_error = pyqtSignal(str)
     show_warning = pyqtSignal(str)
@@ -37,27 +39,25 @@ class LayerDialogsController:
         self.__columns_config_model: ColumnsConfigModel = columns_config_model
 
         self.__service = service
-        self.__schema: str = ""
-
-    def set_schema(self, schema: str):
-        self.__schema = schema
 
     def set_service(self, service: SpatialDataService):
         self.__service = service
 
+    def cancel_initialization(self):
+        self.initialization_cancelled.emit()
+
 
 # для SelectLayersDialog
+    def layer_select_step_back(self):
+        self.layer_select_back_requested.emit()
+
     @pyqtSlot()
     def get_layers(self) -> list[str]:
         if self.__service is None:
             self.layer_selection_failed.emit("Не удалось подключиться.\nВернитесь к настройке подключения.")
             return []
 
-        if not self.__schema:
-            self.layer_selection_failed.emit("Не выбрана схема базы данных.")
-            return []
-
-        return self.__service.get_tables(self.__schema)
+        return self.__service.get_tables()
 
     @pyqtSlot(str, object, object)
     def add_layer_to_config(self, layer_name: str, layer_role: LayerRole):
@@ -95,6 +95,9 @@ class LayerDialogsController:
 
 
 # для TableColumnsConfigDialog
+    def column_setup_step_back(self):
+        self.column_setup_back_requested.emit()
+
     @pyqtSlot()
     def change_column_info(self, table_name: str, col_name: str | None, role: ColumnRole):
         self.__columns_config_model.set_mapping(table_name, role, col_name)

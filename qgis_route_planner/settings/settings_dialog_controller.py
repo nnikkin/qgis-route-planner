@@ -5,16 +5,16 @@ from qgis_route_planner.settings.profile_provider import ProfileProvider
 from qgis_route_planner.settings.weather_provider import WeatherSettingsProvider
 
 if TYPE_CHECKING:
-    from settings_model import SettingsModel
-    from settings_service import SettingsService
+    from .settings_model import SettingsModel
+    from .settings_service import SettingsService
     from qgis_route_planner.vehicle.vehicle_type import VehicleType
 
-from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject
 
 from qgis_route_planner.presentation import FormMode
 
 
-class SettingsDialogController:
+class SettingsDialogController(QObject):
     """ Контроллер окна настроек """
 
     open_page_requested = pyqtSignal(int)

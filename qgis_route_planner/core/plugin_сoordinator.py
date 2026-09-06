@@ -2,26 +2,30 @@ from __future__ import annotations
 
 import copy
 
-from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.core import QgsTask, QgsApplication
+from qgis.utils import iface
 
 from qgis_route_planner.logger import Logger
-from qgis_route_planner.exceptions import RoutingPluginError
+from qgis_route_planner.exceptions import PluginError
 from qgis_route_planner.core.db_connection import DbConnection
 
 from qgis_route_planner.main import MainWindowModel, MainWindowController, MainWindow
-from qgis_route_planner.setup import RoadGraphRepository, LayerRepository
-
-from qgis_route_planner.setup import (
-    DbConfigModel,
+from qgis_route_planner.layer_config import (
+    RoadGraphRepository,
+    LayerRepository,
+    SpatialDataService,
     LayerConfigModel,
     ColumnsConfigModel,
-    TableService,
-    InitDialogsController,
     LayersSelectDialog,
     LayerColumnsDialog,
-    ConnectionConfigDialog
+    LayerDialogsController
+)
+from qgis_route_planner.db_con_init import (
+    ConnectionConfigDialog,
+    DbInitController,
+    DbConfigModel
 )
 from qgis_route_planner.settings import (
     SettingsDialog,
@@ -40,7 +44,7 @@ from qgis_route_planner.routing import RoutingService, WeatherService
 from qgis_route_planner.vehicle import VehicleProfileRepository, VehicleService
 
 
-class PluginCoordinator:
+class PluginCoordinator(QObject):
     """ Контроллер плагина """
 
     plugin_initialized = pyqtSignal()
@@ -52,10 +56,11 @@ class PluginCoordinator:
     show_info = pyqtSignal(str)
 
     def __init__(self):
-        super().__init__(parent=None)
+        super().__init__()
 
         self.__build_task = None
         self.__rebuild_task = None
+        self.__is_initialized = False
 
         self.__db_config_model: DbConfigModel = DbConfigModel()
         self.__layers_config_model: LayerConfigModel = LayerConfigModel()
@@ -67,23 +72,25 @@ class PluginCoordinator:
         self.__main_window_controller: MainWindowController | None = None
         self.__settings_controller: SettingsDialogController | None = None
         self.__restriction_controller: RestrictionDialogController | None = None
-        self.__init_dialogs_controller: InitDialogsController = InitDialogsController(
-            db_config_model=self.__db_config_model,
+        self.__db_config_controller: DbInitController = DbInitController(
+            model=self.__db_config_model
+        )
+        self.__layer_dialogs_controller: LayerDialogsController = LayerDialogsController(
             layer_config_model=self.__layers_config_model,
             columns_config_model=self.__cols_config_model
         )
 
         self.__db_config_dialog: ConnectionConfigDialog = ConnectionConfigDialog(
             model=self.__db_config_model,
-            controller=self.__init_dialogs_controller,
+            controller=self.__db_config_controller,
         )
         self.__layer_select_dialog: LayersSelectDialog = LayersSelectDialog(
             model=self.__layers_config_model,
-            controller=self.__init_dialogs_controller,
+            controller=self.__layer_dialogs_controller,
         )
         self.__cols_config_dialog: LayerColumnsDialog = LayerColumnsDialog(
             model=self.__cols_config_model,
-            controller=self.__init_dialogs_controller,
+            controller=self.__layer_dialogs_controller,
         )
         self.__main_window: MainWindow | None = None
         self.__restriction_dialog: RestrictionDialog | None = None
@@ -92,7 +99,7 @@ class PluginCoordinator:
         self.__db_connection: DbConnection | None = None
 
         self.__settings_service: SettingsService | None = None
-        self.__spatial_data_service: TableService | None = None
+        self.__spatial_data_service: SpatialDataService | None = None
         self.__routing_service: RoutingService | None = None
         self.__restriction_service: RestrictionService | None = None
         self.__weather_service: WeatherService | None = None
@@ -114,18 +121,26 @@ class PluginCoordinator:
         self.__connect()
 
     def first_start_initialize(self):
+        self.__is_initialized = False
         Logger.info("Начата инициализация плагина")
         self.__db_config_dialog.open()
 
     def open_main_window(self):
+        if not self.__is_initialized:
+            self.first_start_initialize()
+            return
+
         self.__main_window.show()
 
     def __connect(self):
-        self.__init_dialogs_controller.con_test_requested.connect(self.__db_con_test)
-        self.__init_dialogs_controller.con_params_obtained.connect(self.__db_con_created)
-        self.__init_dialogs_controller.layers_selected.connect(self.__layers_selected)
-        self.__init_dialogs_controller.columns_configured.connect(self.__columns_configured)
-        self.__init_dialogs_controller.init_cancelled.connect(self.__initialization_cancelled)
+        self.__db_config_controller.con_test_requested.connect(self.__db_con_test)
+        self.__db_config_controller.con_params_obtained.connect(self.__db_con_created)
+        self.__db_config_controller.initialization_cancelled.connect(self.__initialization_cancelled)
+        self.__layer_dialogs_controller.layers_selected.connect(self.__layers_selected)
+        self.__layer_dialogs_controller.columns_configured.connect(self.__columns_configured)
+        self.__layer_dialogs_controller.layer_select_back_requested.connect(self.__back_to_db_config)
+        self.__layer_dialogs_controller.column_setup_back_requested.connect(self.__back_to_layer_select)
+        self.__layer_dialogs_controller.initialization_cancelled.connect(self.__initialization_cancelled)
 
     def __init_views(self):
         self.__main_window = MainWindow(
@@ -153,23 +168,46 @@ class PluginCoordinator:
         self.__settings_controller.graph_rebuild_requested.connect(self.__on_graph_rebuild_requested)
         self.__settings_controller.weather_settings_saved.connect(self.__apply_weather_settings)
 
+        self.__main_window_controller = MainWindowController(
+            model=self.__main_window_model,
+            routing_service=self.__routing_service,
+        )
+        self.__main_window_controller.open_settings_requested.connect(
+            self.__settings_controller.open_dialog_tab
+        )
+        self.__main_window_controller.map_layers_requested.connect(
+            self.__load_map_layers
+        )
+        self.__main_window_controller.active_restriction_nodes_requested.connect(
+            self.__provide_active_restriction_node_ids
+        )
+
         self.__restriction_controller = RestrictionDialogController(
             self.__restriction_model,
             self.__restriction_service
         )
-
-        self.__main_window_controller = MainWindowController(
-            model=self.__main_window_model,
-            restriction_model=self.__restriction_model,
-            settings_controller=self.__settings_controller,
-            restr_controller=self.__restriction_controller,
-            data_service=self.__spatial_data_service,
-            routing_service=self.__routing_service,
-            restriction_service=self.__restriction_service,
+        self.__main_window_controller.open_restrictions_requested.connect(
+            self.__restriction_controller.open_dialog
+        )
+        self.__main_window_controller.refresh_restrictions_requested.connect(
+            self.__restriction_controller.refresh_restrictions
+        )
+        self.__main_window_controller.restriction_point_selected.connect(
+            self.__restriction_controller.on_point_selected
+        )
+        self.__restriction_controller.select_point_on_map_requested.connect(
+            self.__main_window_controller.on_map_selection_requested
+        )
+        self.__restriction_controller.restrictions_display_data_changed.connect(
+            self.__main_window_controller.on_restriction_display_data_changed
         )
 
         self.__settings_controller.active_profile_changed.connect(
             self.__main_window_controller.update_active_profile
+        )
+
+        self.__settings_controller.select_distance_setting_saved.connect(
+            self.__main_window_controller.set_point_select_distance
         )
 
     def __init_repositories(self):
@@ -181,10 +219,9 @@ class PluginCoordinator:
     def __init_services(self):
         self.__settings_service = SettingsService()
         self.__vehicle_service = VehicleService(self.__vehicle_repo)
-        self.__spatial_data_service = TableService(
+        self.__spatial_data_service = SpatialDataService(
             self.__layer_repo,
             self.__graph_repo,
-            self.__restriction_repo,
         )
         weather_settings = self.__settings_service.load_weather_settings()
         self.__weather_service = WeatherService(
@@ -195,61 +232,69 @@ class PluginCoordinator:
         self.__routing_service.set_weather_settings(weather_settings)
         self.__restriction_service = RestrictionService(self.__restriction_repo)
 
-    def __init_everything(self):
-        self.__init_repositories()
-        self.__init_services()
-        self.__init_controllers()
-        self.__init_views()
+    def __create_connection(self, host, port, username, password, database) -> DbConnection:
+        return DbConnection(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            database=database,
+        )
 
-    def __db_con_test(self):
+    @pyqtSlot(str, str, str, str, str)
+    def __db_con_test(self, host, port, username, password, database):
         try:
-            Logger.info("Идёт проверка соединения с базой данных...")
-            if self.__init_dialogs_controller is None:
-                self.__restore_init_dialogs_controller()
+            if self.__db_config_controller is None:
+                raise PluginError("Не задан DbInitController.")
 
-            self.__db_connection = DbConnection(
-                host=self.__db_config_model.host,
-                port=self.__db_config_model.port,
-                username=self.__db_config_model.username,
-                password=self.__db_config_model.password,
-                database=self.__db_config_model.database,
-                schema=self.__db_config_model.schema,
+            Logger.info("Идёт проверка соединения с базой данных...")
+            self.__db_connection = self.__create_connection(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                database=database
             )
-            if self.__db_connection.test_connection():
-                Logger.info("Проверка соединения пройдена!")
-                self.__init_repositories()
-                self.__init_services()
-                self.__init_dialogs_controller.set_service(self.__spatial_data_service)
-        except RoutingPluginError as e:
-            QMessageBox.critical(None, "Ошибка", str(e), QMessageBox.Ok)
+            schemas = self.__db_connection.get_schemas()
+            self.__db_config_model.schemas = schemas
+
+            if len(schemas) == 0:
+                QMessageBox.warning(self.__layer_select_dialog, "Внимание",
+                                 f"В заданной базе данных отсутствуют схемы!", QMessageBox.Ok)
         except Exception as e:
-            Logger.error(e)
-            QMessageBox.critical(None, "Ошибка", "Не удалось подключиться к базе данных", QMessageBox.Ok)
+            self.__db_config_controller.connection_failed.emit(str(e))
+        finally:
+            Logger.info("Проверка соединения выполнена.")
 
     def __db_con_created(self):
         try:
-            self.__db_connection = DbConnection(
-                host=self.__db_config_model.host,
-                port=self.__db_config_model.port,
-                username=self.__db_config_model.username,
-                password=self.__db_config_model.password,
-                database=self.__db_config_model.database,
-                schema=self.__db_config_model.schema,
-            )
+            self.__db_connection.schema = self.__db_config_model.schema
+
             if self.__main_window_controller and self.__settings_controller:
                 self.__main_window.close()
                 self.__settings_dialog.close()
 
             self.__reset_init_selection()
-            self.__init_everything()
+            self.__init_repositories()
+            self.__init_services()
+            self.__layer_dialogs_controller.set_service(self.__spatial_data_service)
+            self.__init_controllers()
+            self.__init_views()
+
             self.__layer_select_dialog.open()
         except Exception as e:
-            QMessageBox.critical(None, "Ошибка",
-                f"Не удалось завершить инициализацию плагина:\n{e}", QMessageBox.Ok)
+            QMessageBox.critical(self.__layer_select_dialog, "Ошибка",
+                                 f"Не удалось завершить инициализацию плагина:\n{e}", QMessageBox.Ok)
+
+    def __back_to_db_config(self):
+        self.__db_config_dialog.open()
 
     def __layers_selected(self):
         self.__selected_layers = self.__layers_config_model.selected_layers
         self.__cols_config_dialog.open()
+
+    def __back_to_layer_select(self):
+        self.__layer_select_dialog.open()
 
     def __columns_configured(self):
         self.__column_mapping = self.__cols_config_model.mappings
@@ -277,6 +322,16 @@ class PluginCoordinator:
         if self.__routing_service:
             self.__routing_service.set_weather_settings(settings)
 
+    def __load_map_layers(self, selected_layers: list | None = None):
+        layers = self.__spatial_data_service.get_spatial_layers()
+        if selected_layers:
+            layers.extend(self.__spatial_data_service.get_selected_spatial_layers(selected_layers))
+        self.__main_window_controller.set_map_layers(layers)
+
+    def __provide_active_restriction_node_ids(self, profile):
+        node_ids = self.__restriction_service.get_active_restriction_node_ids(profile)
+        self.__main_window_controller.set_active_restriction_node_ids(node_ids)
+
     def __initialization_finished(self):
         selected_layers = list(self.__selected_layers)
         column_mapping = dict(self.__column_mapping)
@@ -286,16 +341,20 @@ class PluginCoordinator:
             def run_in_background(task: QgsTask):
                 task.setProgress(0)
                 self.__spatial_data_service.run_init_database(selected_layers, column_mapping)
+                task.setProgress(50)
+                self.__restriction_service.run_init_database()
                 task.setProgress(100)
                 return True
 
             def on_finished(exception, result=None):
                 if exception:
-                    QMessageBox.critical(None, "Ошибка",
+                    QMessageBox.critical(iface.mainWindow(), "Ошибка",
                                          f"Не удалось инициализировать БД:\n{exception}", QMessageBox.Ok)
                     Logger.error(f"Не удалось инициализировать БД:\n{exception}")
                     if self.__is_reconnecting:
                         self.__reconnect_cancelled()
+                    else:
+                        self.__initialization_failed()
                     return
                 self.__on_topology_build_finished()
 
@@ -306,7 +365,7 @@ class PluginCoordinator:
             )
             QgsApplication.taskManager().addTask(self.__build_task)
         except Exception as e:
-            QMessageBox.critical(None, "Ошибка",
+            QMessageBox.critical(iface.mainWindow(), "Ошибка",
                 f"Не удалось построить граф:\n{e}\nПлагин завершает работу.", QMessageBox.Ok)
             Logger.error(f"Не удалось построить граф:\n{e}\nПлагин завершает работу.")
             self.crit_plugin_error.emit()
@@ -316,6 +375,7 @@ class PluginCoordinator:
         if self.__settings_service and self.__db_connection:
             self.__settings_service.save_db_params(self.__db_connection)
         self.__finish_reconnect()
+        self.__is_initialized = True
         self.plugin_initialized.emit()
         self.__initialize_map()
         Logger.info("Инициализация плагина завершена!")
@@ -331,13 +391,24 @@ class PluginCoordinator:
             Logger.warning("Пользователь отменил процесс инициализации")
             return
 
+        self.__is_initialized = False
         if self.__main_window_controller:
             self.__main_window.close()
+        self.__reset_initialization_state()
+        self.plugin_init_cancelled.emit()
+
+    def __initialization_failed(self):
+        self.__is_initialized = False
+        if self.__main_window:
+            self.__main_window.close()
+        if self.__settings_dialog:
+            self.__settings_dialog.close()
+        self.__reset_initialization_state()
         self.plugin_init_cancelled.emit()
 
     def __initialize_map(self):
         self.__main_window_controller.initialize_map(
-            selected_layers=list(getattr(self, "_PluginController__selected_layers", []))
+            selected_layers=list(self.__selected_layers or [])
         )
         self.__main_window.show()
 
@@ -421,8 +492,8 @@ class PluginCoordinator:
         if current_settings_dialog and current_settings_dialog is not self.__settings_dialog:
             current_settings_dialog.close()
 
-        if self.__init_dialogs_controller is not None:
-            self.__init_dialogs_controller.set_service(self.__spatial_data_service)
+        if self.__layer_dialogs_controller is not None:
+            self.__layer_dialogs_controller.set_service(self.__spatial_data_service)
         if self.__settings_service and self.__db_connection:
             self.__settings_service.save_db_params(self.__db_connection)
         if self.__main_window:
@@ -468,9 +539,18 @@ class PluginCoordinator:
         self.__selected_layers = []
         self.__column_mapping = {}
 
-    def __restore_init_dialogs_controller(self):
-        self.__init_dialogs_controller = InitDialogsController(
-            db_config_model=self.__db_config_model,
+    def __reset_initialization_state(self):
+        self.__db_config_model.clear()
+        self.__reset_init_selection()
+        self.__db_connection = None
+        self.__spatial_data_service = None
+        self.__layer_dialogs_controller.set_service(None)
+
+    def __restore_init_dialogs_controllers(self):
+        self.__db_config_controller: DbInitController = DbInitController(
+            model=self.__db_config_model
+        )
+        self.__layer_dialogs_controller: LayerDialogsController = LayerDialogsController(
             layer_config_model=self.__layers_config_model,
             columns_config_model=self.__cols_config_model
         )

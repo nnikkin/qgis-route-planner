@@ -3,17 +3,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from qgis_route_planner.restrictions.restriction_dialog_controller import RestrictionDialogController
-    from qgis_route_planner.restrictions.restriction_model import RestrictionModel
+    from .restriction_dialog_controller import RestrictionDialogController
+    from .restriction_model import RestrictionModel
 
 from qgis.PyQt import QtCore, QtWidgets
 from qgis.PyQt.QtCore import QDateTime, QObject, QSize
 from qgis.PyQt.QtGui import QIcon
 
-from qgis_route_planner.shared.message_box_mixin import MessageBoxMixin
-from qgis_route_planner.restrictions.restriction_type import RestrictionType
-from qgis_route_planner.restrictions.restriction_record import RestrictionRecord
-from qgis_route_planner.shared.form_mode import FormMode
+from qgis_route_planner.presentation import MessageBoxMixin, FormMode
+from .restriction_type import RestrictionType
+from .restriction_record import RestrictionRecord
 
 
 class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
@@ -31,7 +30,7 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
         self.__model = model
         self.__current_point_type = "start"
 
-        self.setupUi()
+        self.__setupUi()
         self.__connect_controller_signals()
         self.__connect_ui_signals()
 
@@ -86,9 +85,10 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.clearPointFieldButton.clicked.connect(lambda: self.__clear_point("start"))
 
-    def setupUi(self):
+    def __setupUi(self):
         self.setObjectName("RestrictionDialog")
         self.resize(832, 500)
+        self.setWindowIcon(QIcon(":/plugins/qgis_route_planner/plugin_icon"))
 
         self.horizontalLayout = QtWidgets.QHBoxLayout(self)
         self.horizontalLayout.setObjectName("horizontalLayout")
@@ -231,10 +231,10 @@ class RestrictionDialog(QtWidgets.QDialog, MessageBoxMixin):
 
         self.horizontalLayout.addWidget(self.restrictionForm)
 
-        self.retranslateUi()
+        self.__retranslateUi()
         QtCore.QMetaObject.connectSlotsByName(self)
 
-    def retranslateUi(self):
+    def __retranslateUi(self):
         _t = QtCore.QCoreApplication.translate
         self.setWindowTitle(_t("RestrictionDialog", "Настройки ограничений"))
         self.createRestrictionButton.setText(_t("RestrictionDialog", "Новое ограничение"))

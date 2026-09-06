@@ -1,7 +1,7 @@
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from qgis_route_planner.routing.route_point import RoutePoint
-from qgis_route_planner.vehicle.vehicle_profile import VehicleProfile
+from qgis_route_planner.main.active_profile_dto import ActiveProfileDto
+from qgis_route_planner.main.point_dto import RoutePointDto
 
 
 class MainWindowModel(QObject):
@@ -12,6 +12,7 @@ class MainWindowModel(QObject):
     active_route_changed = pyqtSignal(int)
 
     active_profile_changed = pyqtSignal(object)
+    point_select_distance_changed = pyqtSignal(float)
 
     status_message_changed = pyqtSignal(str)
     active_tab_changed = pyqtSignal(int)
@@ -22,10 +23,11 @@ class MainWindowModel(QObject):
 
     def __init__(self):
         super().__init__()
-        self.__points: list[RoutePoint] = []
+        self.__points: list[RoutePointDto] = []
         self.__routes: list[list[dict]] = []
         self.__active_route_index: int = 0
-        self.__active_profile: VehicleProfile | None = None
+        self.__active_profile: ActiveProfileDto | None = None
+        self.__point_select_distance: float = 10.0
         self.__status_message: str = ""
         self.__active_tab: int = 0
         self.__clear_button_enabled: bool = False
@@ -33,11 +35,11 @@ class MainWindowModel(QObject):
         self.__restrictions_visible: bool = False
 
     @property
-    def points(self) -> list[RoutePoint]:
+    def points(self) -> list[RoutePointDto]:
         return self.__points
 
     @points.setter
-    def points(self, value: list[RoutePoint]):
+    def points(self, value: list[RoutePointDto]):
         self.__points = value
         self.points_changed.emit(self.__points)
         self.clear_button_enabled = bool(self.__points)
@@ -61,15 +63,24 @@ class MainWindowModel(QObject):
         self.active_route_changed.emit(value)
 
     @property
-    def active_profile(self) -> VehicleProfile | None:
+    def active_profile(self) -> ActiveProfileDto | None:
         return self.__active_profile
 
     @active_profile.setter
-    def active_profile(self, value: VehicleProfile | None):
+    def active_profile(self, value: ActiveProfileDto | None):
         self.__active_profile = value
         self.active_profile_changed.emit(value)
         if value:
             self.status_message = f"Активный профиль: {value.name}"
+
+    @property
+    def point_select_distance(self) -> float:
+        return self.__point_select_distance
+
+    @point_select_distance.setter
+    def point_select_distance(self, value: float):
+        self.__point_select_distance = value
+        self.point_select_distance_changed.emit(value)
 
     @property
     def status_message(self) -> str:

@@ -5,22 +5,19 @@ from qgis_route_planner.logger import Logger
 from qgis_route_planner.exceptions import DataImportError
 
 if TYPE_CHECKING:
-    from main_window_model import MainWindowModel
-    from qgis_route_planner.restrictions.restriction_model import RestrictionModel
-    from qgis_route_planner.restrictions.restriction_dialog_controller import RestrictionDialogController
-    from qgis_route_planner.restrictions.restriction_service import RestrictionService
-    from qgis_route_planner.settings.settings_dialog_controller import SettingsDialogController
-    from qgis_route_planner.setup.spatial_data_service import TableService
+    from .main_window_model import MainWindowModel
     from qgis_route_planner.routing.routing_service import RoutingService
 
 from qgis_route_planner.routing.selected_point_collection import SelectedPointCollection
 from qgis_route_planner.routing.point_type import PointType
+from qgis_route_planner.main.active_profile_dto import ActiveProfileDto
+from qgis_route_planner.main.point_dto import RoutePointDto
 from qgis_route_planner.main.route_export_service import RouteExportService
 
-from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal
+from qgis.PyQt.QtCore import pyqtSlot, pyqtSignal, QObject
 from qgis.core import QgsPointXY
 
-class MainWindowController:
+class MainWindowController(QObject):
     """ Контроллер главного окна """
 
     layers_obtained = pyqtSignal(list)
@@ -30,13 +27,16 @@ class MainWindowController:
     point_marker_add_requested = pyqtSignal(object)
     point_marker_remove_requested = pyqtSignal(int)
     point_marker_update_requested = pyqtSignal(int)
-
+    open_settings_requested = pyqtSignal(int)
+    map_layers_requested = pyqtSignal(object)
     select_point_on_map_requested = pyqtSignal(bool)
+    open_restrictions_requested = pyqtSignal()
+    refresh_restrictions_requested = pyqtSignal()
+    active_restriction_nodes_requested = pyqtSignal(object)
+    restriction_point_selected = pyqtSignal(object, int)
     restriction_point_added = pyqtSignal(int, float, float)
-
-    restrictions_display_requested = pyqtSignal(list)
-    restrictions_display_cleared = pyqtSignal()
-
+    restrict_points_display_requested = pyqtSignal(list)
+    restrict_points_display_cleared = pyqtSignal()
     show_error = pyqtSignal(str)
     show_warning = pyqtSignal(str)
     show_info = pyqtSignal(str)
@@ -44,34 +44,18 @@ class MainWindowController:
     def __init__(
             self,
             model: MainWindowModel,
-            restriction_model: RestrictionModel,
-            settings_controller: SettingsDialogController,
-            restr_controller: RestrictionDialogController,
-            data_service: TableService,
             routing_service: RoutingService,
-            restriction_service: RestrictionService,
     ):
         super().__init__()
 
         self.__model: MainWindowModel = model
-        self.__restriction_model: RestrictionModel = restriction_model
-        self.__settings_controller: SettingsDialogController = settings_controller
-        self.__restr_controller: RestrictionDialogController = restr_controller
-        self.__restr_controller.select_point_on_map_requested.connect(
-            self.__on_map_selection_requested
-        )
-        self.__restriction_model.restrictions_changed.connect(
-            self.__on_restrictions_changed
-        )
-        self.__restriction_model.current_restriction_id_changed.connect(
-            self.__on_current_restriction_changed
-        )
 
-        self.__data_service: TableService = data_service
         self.__routing_service: RoutingService = routing_service
-        self.__restriction_service: RestrictionService = restriction_service
 
         self.__current_route: SelectedPointCollection = SelectedPointCollection()
+        self.__active_profile = None
+        self.__active_restriction_node_ids: list[int] = []
+        self.__restriction_display_data: list[dict] = []
 
         self.__restriction_points: dict[int, tuple[float, float]] = {}
         self.__map_canvas = None
@@ -81,33 +65,39 @@ class MainWindowController:
         self.__map_canvas = canvas
 
     def open_settings_dialog(self, tab_index: int = 0):
-        self.__settings_controller.open_dialog_tab(tab_index)
+        self.open_settings_requested.emit(tab_index)
 
     def open_restriction_dialog(self):
-        self.__restr_controller.open_dialog()
+        self.open_restrictions_requested.emit()
 
     @pyqtSlot(bool)
     def set_restrictions_visible(self, visible: bool):
         self.__model.restrictions_visible = visible
         if visible:
-            self.__restr_controller.refresh_restrictions()
+            self.refresh_restrictions_requested.emit()
             self.__update_visible_restrictions()
             Logger.info("Ограничения отображаются на карте")
         else:
             Logger.info("Ограничения скрыты с карты")
-            self.restrictions_display_cleared.emit()
+            self.restrict_points_display_cleared.emit()
 
     def initialize_map(self, schema: str = "routing", selected_layers: list | None = None):
-        layers = self.__data_service.get_spatial_layers(schema=schema)
-        if selected_layers:
-            layers.extend(self.__data_service.get_selected_spatial_layers(selected_layers))
+        self.map_layers_requested.emit(selected_layers)
+
+    @pyqtSlot(list)
+    def set_map_layers(self, layers: list):
         if not layers:
-            raise DataImportError(f"В схеме '{schema}' не обнаружены таблицы с геоданными")
+            raise DataImportError("В выбранной схеме не обнаружены таблицы с геоданными")
         self.layers_obtained.emit(layers)
+
+    @pyqtSlot(float)
+    def set_point_select_distance(self, distance: float):
+        self.__model.point_select_distance = distance
+        self.__routing_service.set_point_select_distance(distance)
 
     @pyqtSlot(QgsPointXY)
     def on_map_point_selected(self, point: QgsPointXY):
-        self.__routing_service.set_point_select_distance(self.__settings_controller.get_select_point_distance())
+        self.__routing_service.set_point_select_distance(self.__model.point_select_distance)
         snapped = self.__routing_service.snap_point_to_road(point)
         if not snapped:
             self.__model.status_message = "error:snap"
@@ -119,7 +109,7 @@ class MainWindowController:
 
     @pyqtSlot(QgsPointXY, PointType, object)
     def on_add_route_point(self, qgs_point_xy: QgsPointXY, point_type: PointType, snap_info):
-        if not self.__model.active_profile:
+        if not self.__active_profile:
             self.__model.status_message = "error:no_profile"
             return
 
@@ -140,7 +130,10 @@ class MainWindowController:
         )
         route_point = self.__current_route.get_point(self.__current_route.next_point_id - 1)
 
-        self.__model.points = list(self.__current_route.points)
+        self.__model.points = [
+            self.__route_point_to_dto(point)
+            for point in self.__current_route.points
+        ]
         self.point_marker_add_requested.emit(route_point)
 
         self.__try_build_routes()
@@ -180,39 +173,43 @@ class MainWindowController:
         start_node_id = point_ids[0]
         end_node_id = point_ids[-1]
         waypoint_ids = point_ids[1:-1]
-        restriction_node_ids = self.__restriction_service.get_active_restriction_node_ids(
-            self.__model.active_profile
-        )
+        self.active_restriction_nodes_requested.emit(self.__active_profile)
+        restriction_node_ids = list(self.__active_restriction_node_ids)
 
         p1 = f"Запрошено построение маршрутов из точки {start_node_id} в точку {end_node_id}"
         p2 = f" с промежуточными точками {waypoint_ids}" if waypoint_ids else ""
 
         Logger.info(p1 + p2)
 
-        routes = self.__routing_service.calculate_routes(
+        found_routes = self.__routing_service.calculate_routes(
             start_node_id, end_node_id,
-            self.__model.active_profile, waypoint_ids, restriction_node_ids, self.__current_route.points
+            self.__active_profile, waypoint_ids, restriction_node_ids, self.__current_route.points
         )
 
-        if not routes:
+        if not found_routes:
             Logger.info("Маршруты не найдены")
             self.__model.status_message = "error:no_routes"
             self.__model.routes = []
             self.routes_display_requested.emit([])
             return
 
-        Logger.info(f"Найдено маршрутов: {len(routes)}")
-        self.__model.routes = routes
+        Logger.info(f"Найдено маршрутов: {len(found_routes)}")
+        self.__model.routes = found_routes
         self.__model.active_tab = 1
-        self.routes_display_requested.emit(routes)
+        self.routes_display_requested.emit(found_routes)
 
     @pyqtSlot(object)
     def update_active_profile(self, profile):
         """ Обновляет активный профиль в модели главного окна """
-        self.__model.active_profile = profile
+        self.__active_profile = profile
+        self.__model.active_profile = self.__profile_to_dto(profile)
+
+    @pyqtSlot(list)
+    def set_active_restriction_node_ids(self, node_ids: list[int]):
+        self.__active_restriction_node_ids = node_ids
 
     @pyqtSlot(bool)
-    def __on_map_selection_requested(self, active: bool = True):
+    def on_map_selection_requested(self, active: bool = True):
         """ Запрос диалога ограничений """
         self.__model.restriction_select_mode = active
 
@@ -220,7 +217,7 @@ class MainWindowController:
         """ Добавить точку ограничения """
         self.__restriction_points[node_id] = (point.x(), point.y())
         self.restriction_point_added.emit(node_id, point.x(), point.y())
-        self.__restr_controller.on_point_selected(point, node_id)
+        self.restriction_point_selected.emit(point, node_id)
         self.__model.restriction_select_mode = False
 
     def cancel_add_restriction_point(self):
@@ -236,34 +233,53 @@ class MainWindowController:
         return list(self.__restriction_points.keys())
 
     def snap_point(self, point: QgsPointXY):
-        self.__routing_service.set_point_select_distance(self.__settings_controller.get_select_point_distance())
+        self.__routing_service.set_point_select_distance(self.__model.point_select_distance)
         return self.__routing_service.snap_point_to_road(point)
 
-    def __on_restrictions_changed(self, _restrictions: list):
-        self.__update_visible_restrictions()
-
-    def __on_current_restriction_changed(self, _restriction_id: int | None):
+    @pyqtSlot(list)
+    def on_restriction_display_data_changed(self, restrictions: list[dict]):
+        self.__restriction_display_data = restrictions
         self.__update_visible_restrictions()
 
     def __update_visible_restrictions(self):
         if not self.__model.restrictions_visible:
             return
 
-        selected_id = self.__restriction_model.current_restriction_id
         restriction_points = []
 
-        for restriction in self.__restriction_model.restrictions:
-            if restriction.node_id is None:
+        for restriction in self.__restriction_display_data:
+            node_id = restriction.get("node_id")
+            if node_id is None:
                 continue
-            coords = self.__routing_service.get_node_coordinates(restriction.node_id)
+            coords = self.__routing_service.get_node_coordinates(node_id)
             if not coords:
                 continue
             restriction_points.append({
-                "id": restriction.id,
-                "node_id": restriction.node_id,
+                "id": restriction.get("id"),
+                "node_id": node_id,
                 "x": coords[0],
                 "y": coords[1],
-                "selected": restriction.id == selected_id,
+                "selected": restriction.get("selected", False),
             })
 
-        self.restrictions_display_requested.emit(restriction_points)
+        self.restrict_points_display_requested.emit(restriction_points)
+
+    @staticmethod
+    def __route_point_to_dto(route_point) -> RoutePointDto:
+        return RoutePointDto(
+            id=route_point.id,
+            point_type=route_point.point_type,
+            order=route_point.order,
+            x=route_point.qgs_point_xy.x(),
+            y=route_point.qgs_point_xy.y(),
+            node_id=route_point.node_id,
+        )
+
+    @staticmethod
+    def __profile_to_dto(profile) -> ActiveProfileDto | None:
+        if profile is None:
+            return None
+        return ActiveProfileDto(
+            id=getattr(profile, "id", None),
+            name=getattr(profile, "name", ""),
+        )

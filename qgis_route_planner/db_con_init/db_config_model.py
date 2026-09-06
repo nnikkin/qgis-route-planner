@@ -9,6 +9,7 @@ class DbConfigModel(QObject):
     password_changed = pyqtSignal(str)
     database_changed = pyqtSignal(str)
     schema_changed = pyqtSignal(str)
+    schemas_obtained = pyqtSignal(list)
     any_field_changed = pyqtSignal()
 
     def __init__(self):
@@ -20,6 +21,7 @@ class DbConfigModel(QObject):
         self.__password = ""
         self.__database = ""
         self.__schema = ""
+        self.__schemas = []
 
         for s in (
                 self.host_changed,
@@ -35,7 +37,7 @@ class DbConfigModel(QObject):
         return self.__host
 
     @host.setter
-    def host(self, value):
+    def host(self, value:str):
         self.__host = value
         self.host_changed.emit(value)
 
@@ -44,7 +46,7 @@ class DbConfigModel(QObject):
         return self.__port
 
     @port.setter
-    def port(self, value):
+    def port(self, value:str):
         self.__port = value
         self.port_changed.emit(value)
 
@@ -53,7 +55,7 @@ class DbConfigModel(QObject):
         return self.__password
 
     @password.setter
-    def password(self, value):
+    def password(self, value:str):
         self.__password = value
         self.password_changed.emit(value)
 
@@ -62,7 +64,7 @@ class DbConfigModel(QObject):
         return self.__username
 
     @username.setter
-    def username(self, value):
+    def username(self, value:str):
         self.__username = value
         self.username_changed.emit(value)
 
@@ -71,7 +73,7 @@ class DbConfigModel(QObject):
         return self.__database
 
     @database.setter
-    def database(self, value):
+    def database(self, value:str):
         self.__database = value
         self.database_changed.emit(value)
 
@@ -80,9 +82,18 @@ class DbConfigModel(QObject):
         return self.__schema
 
     @schema.setter
-    def schema(self, value):
+    def schema(self, value:str):
         self.__schema = value
         self.schema_changed.emit(value)
+
+    @property
+    def schemas(self):
+        return self.__schemas
+
+    @schemas.setter
+    def schemas(self, value:list[str]):
+        self.__schemas = value
+        self.schemas_obtained.emit(value)
 
     def validate_values_for_schema(self):
         """ Проверка введённых значений, нужных для получения списка схем """
@@ -91,6 +102,15 @@ class DbConfigModel(QObject):
     def validate_all_values(self):
         """ Проверка всех значений, нужных для подключения """
         return all([self.host, self.port, self.username, self.password, self.database, self.schema])
+
+    def clear(self):
+        self.host = ""
+        self.port = ""
+        self.username = ""
+        self.password = ""
+        self.database = ""
+        self.schema = ""
+        self.schemas = []
 
     def __on_any_changed(self, _):
         self.any_field_changed.emit()

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from qgis.core import QgsPointXY
-from point_type import PointType
+from .point_type import PointType
 
 
 @dataclass

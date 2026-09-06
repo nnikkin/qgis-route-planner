@@ -4,11 +4,7 @@ from qgis.PyQt.QtCore import QCoreApplication, QSettings, QTranslator
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QApplication
 
-<<<<<<<< HEAD:qgis_route_planner/core/qgis_route_planner.py
-from plugin_сoordinator import PluginCoordinator
-========
-from qgis_route_planner.core.plugin_сoordinator import PluginCoordinator
->>>>>>>> edf1dac (commit 15):qgis_route_planner/qgis_route_planner.py
+from .plugin_coordinator import PluginCoordinator
 
 
 class QgisRoutePlanner:

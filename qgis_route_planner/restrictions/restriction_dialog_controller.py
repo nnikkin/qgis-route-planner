@@ -1,12 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from qgis_route_planner.exceptions import RoutingPluginError
+from qgis_route_planner.exceptions import PluginError
 from qgis_route_planner.logger import Logger
 
 if TYPE_CHECKING:
-    from qgis_route_planner.restrictions.restriction_service import RestrictionService
-    from qgis_route_planner.restrictions.restriction_model import RestrictionModel
+    from .restriction_service import RestrictionService
+    from .restriction_model import RestrictionModel
 
 from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject, QDateTime
 from qgis.core import QgsPointXY
@@ -25,7 +25,7 @@ class RestrictionDialogController(QObject):
     show_warning = pyqtSignal(str)
     show_info = pyqtSignal(str)
 
-    # Сигналы для взаимодействия с main window
+    restrictions_display_data_changed = pyqtSignal(list)
     select_point_on_map_requested = pyqtSignal(bool)
     point_selected = pyqtSignal(object, int)  # point, node_id
 
@@ -86,7 +86,8 @@ class RestrictionDialogController(QObject):
             restrictions = self.__service.get_all_restrictions()
             restriction_records = [RestrictionRecord.dict_to_record(r) for r in restrictions]
             self.__model.restrictions = restriction_records
-        except RoutingPluginError as e:
+            self.__emit_restrictions_display_data()
+        except PluginError as e:
             self.show_error.emit(str(e))
         except Exception as e:
             Logger.error(e)
@@ -99,11 +100,13 @@ class RestrictionDialogController(QObject):
             self.__model.current_restriction_data = None
             self.__model.clear_form()
             self.__model.editing_mode = FormMode.VIEW
+            self.__emit_restrictions_display_data()
             return
 
         self.__model.current_restriction_id = restriction_id
         self.__load_restriction_to_form(restriction_id)
         self.__model.editing_mode = FormMode.VIEW
+        self.__emit_restrictions_display_data()
 
     def on_create_restriction(self):
         """ Обработчик создания нового ограничения """
@@ -189,6 +192,7 @@ class RestrictionDialogController(QObject):
             self.__model.current_restriction_id = None
             self.__model.current_restriction_data = None
             self.__model.clear_form()
+            self.__emit_restrictions_display_data()
             self.show_info.emit("Ограничение сохранено!")
         except Exception as e:
             self.show_error.emit(str(e))
@@ -206,6 +210,7 @@ class RestrictionDialogController(QObject):
             self.__model.clear_form()
             self.__model.editing_mode = FormMode.VIEW
             self.__load_restrictions()
+            self.__emit_restrictions_display_data()
             self.show_info.emit("Ограничение удалено!")
         except Exception as e:
             self.show_error.emit(str(e))
@@ -231,6 +236,18 @@ class RestrictionDialogController(QObject):
                 self.__model.load_record(record)
         except Exception as e:
             self.show_error.emit(f"Ошибка загрузки ограничения: {e}")
+
+    def __emit_restrictions_display_data(self):
+        selected_id = self.__model.current_restriction_id
+        self.restrictions_display_data_changed.emit([
+            {
+                "id": restriction.id,
+                "node_id": restriction.node_id,
+                "selected": restriction.id == selected_id,
+            }
+            for restriction in self.__model.restrictions
+            if restriction.node_id is not None
+        ])
 
     @staticmethod
     def __date_to_storage_text(value) -> str:
